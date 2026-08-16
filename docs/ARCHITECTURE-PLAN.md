@@ -43,12 +43,20 @@ Checked directly, 16 Aug 2026.
 | AFA | 3.59 sen/kWh (Jul 2026) — already sourced, [`RESEARCH.md`](./RESEARCH.md) §4 |
 | **Supabase free-tier pausing** | **Free projects pause after 7 days with no API requests.** Judging is "early September", dates unpublished. See §3.5 — this is a live disqualification risk |
 
-### ⚠️ The one unverified load-bearing assumption
+### ✅ Resolved 16 Aug — PVDAQ verified, and the data plan did change
 
-**That `s3://oedi-data-lake/pvdaq/` is publicly readable with no credentials, and its real partition
-layout and column names match what [`TECHNICAL.md`](./TECHNICAL.md) §2 claims.** The subagents were
-tasked with this and died first. If it is wrong, the data plan changes. **This is task 1, before
-anything else is built.**
+The load-bearing assumption was checked directly. Access works; **the fleet does not.**
+
+- Only **157 systems** have downloadable Parquet, not 1,862 — `DATASETS.md`'s 136/118/99 California
+  clusters are metadata-only rows with no time series.
+- Data is **long-format EAV** (`metric_id` + `value`), requiring a per-system metrics join and a
+  pivot — not the wide table the docs imply.
+- Resolution is **1-minute**, not the 15-minute `TECHNICAL.md` §2 claims.
+- **The demo fleet is now greater Las Vegas:** 8 QA-pass C&I rooftop sites, 40–277 kWp, within
+  37 km, 2,552 concurrent days, 1.22 GB, with per-inverter channels on three of them.
+
+Full detail and corrections in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1. **This is a better fleet
+than the original plan** — C&I rooftop in one weather region, which is the actual product target.
 
 ---
 

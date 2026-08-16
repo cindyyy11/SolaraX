@@ -31,7 +31,13 @@ Module 3 is the differentiator, and it constrains everything. To do fleet peer b
 
 ## 2. The candidates
 
-### 2.1 NREL PVDAQ — ⭐ best cohort density, verified directly
+### 2.1 NREL PVDAQ — ⚠️ counts below are METADATA-ONLY
+
+> **Correction, 16 Aug 2026.** The figures in this section come from the metadata CSV. Enumerating
+> `s3://oedi-data-lake/pvdaq/parquet/pvdata/` shows only **157 systems carry downloadable time
+> series**, of which **30 pass QA with coordinates**. The 136/118/99 California clusters cannot be
+> downloaded. The demo fleet is now **greater Las Vegas** (8 QA-pass C&I rooftop sites, 37 km,
+> 1.22 GB). See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1.
 
 I downloaded and analysed the live site metadata rather than trusting a summary. Note the survey
 paper lists PVDAQ as "158 PV systems" — **that is out of date.** The current public metadata has:
