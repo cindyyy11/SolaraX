@@ -24,11 +24,12 @@
 
 | # | Blocker | Why it's blocking | Owner |
 |---|---|---|---|
-| 1 | **PVDAQ S3 access unverified** | Every module downstream assumes `s3://oedi-data-lake/pvdaq/` is publicly readable with the claimed partitions and columns. If it isn't, the data plan changes. **Task 1, before any code** | — |
-| 2 | **Repo has 1 commit, everything untracked** | Rules require **≥3 commits over ≥2 calendar days**, never backdated. Backdating is an explicit disqualification ground | — |
-| 3 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission** | Cindy (repo owner) |
-| 4 | **`README.md` carries no real content yet** | It is the judges' first impression of the artifact | — |
-| 5 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
+| 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission** | Cindy (repo owner) |
+| 2 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
+| 3 | **No code yet** | Phase 1 overdue. M1 ingestion is now fully specified in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §3 — start there | — |
+
+**Cleared 16 Aug:** ~~PVDAQ S3 unverified~~ (verified, fleet changed) · ~~1 commit / untracked~~
+(4 commits over 2 days) · ~~empty README~~ (written).
 
 ---
 
@@ -64,6 +65,27 @@ plus the Malaysian baseline panel. See [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCH
 ## Log
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
+
+### 16 Aug 2026 (later) — PVDAQ verified, demo fleet changed, ARCHITECTURE.md written
+
+**The load-bearing assumption was wrong, and finding out cost hours instead of days.**
+
+- **Only 157 systems have downloadable Parquet, not 1,862.** `DATASETS.md`'s 136/118/99 California
+  clusters are metadata rows with no time series behind them. Of the 157, **30 pass QA with coords**.
+- **Data is long-format EAV** — `measured_on, utc_measured_on, metric_id, value`. `metric_id` is
+  system-specific and only resolvable via a per-system `metrics` table carrying `calc_scale` /
+  `calc_offset`. Ingestion needs a join, a pivot and a resample. Channel naming is inconsistent
+  (`ac_power`, `ac_power_hW`, `ac_power_1`, `inv1_ac_power`).
+- **Resolution is 1-minute**, not 15-minute. ~185 KB and 20,160 rows per system-day.
+- **New demo fleet — greater Las Vegas.** 8 QA-pass sites within 37 km, **40.6–277.2 kWp** (genuine
+  C&I rooftop, matching the stated buyer), **2,552 days of concurrent overlap**, **1.22 GB** total,
+  and **per-inverter channels on systems 1278 / 1368 / 1369** — which makes the "string-level
+  divergence" claim in PRD v2 §4 real rather than aspirational. This is a **better** fleet than the
+  original plan, not a worse one.
+- **Toolchain proven:** pandas 3.0.5 + pyarrow 25.0.1 install clean on Python 3.14.5.
+- **Written:** [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — full module specs with working
+  code, frozen schema, API contract, validation protocol, 9 decisions with rejected alternatives.
+- **Corrected:** `TECHNICAL.md` §2 and `DATASETS.md` §2.1 now carry the verified reality.
 
 ### 16 Aug 2026 — architecture agreed, repo reorganised
 
