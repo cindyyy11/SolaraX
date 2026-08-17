@@ -1,0 +1,28 @@
+# SolaraX pipeline dependencies
+#
+#   pip install -r pipeline/requirements.txt
+#
+# Only three, deliberately. Everything else the pipeline uses is Python
+# standard library (csv, json, datetime, concurrent.futures, argparse, re).
+#
+# Verified working on Python 3.14.3 at the versions noted below. Minimums are
+# floors rather than exact pins so a teammate on a slightly different Python can
+# still install — if you hit a version-specific problem, pin exactly and say so
+# here rather than leaving the next person to rediscover it.
+
+# S3 access to the public PVDAQ bucket. Used with UNSIGNED signature config —
+# no AWS credentials are needed or wanted.
+boto3>=1.34            # tested: 1.43.72
+
+# Dataframes: the metrics join, the long->wide pivot, daily aggregation.
+pandas>=2.2            # tested: 2.3.3
+
+# Parquet engine behind pandas.read_parquet / to_parquet. PVDAQ ships parquet
+# and every intermediate in data/processed/ is parquet.
+pyarrow>=15.0          # tested: 23.0.1
+
+# --- NOT pinned here, on purpose --------------------------------------------
+# pvlib and scikit-learn belong to M2/M3 (owner A). When A adds them, add them
+# below with their own tested versions. Keeping them out until they are actually
+# used means a clean checkout installs in seconds rather than pulling a large
+# scientific stack nobody is running yet.

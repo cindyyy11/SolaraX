@@ -1,0 +1,39 @@
+{
+  "_comment": "Every commercial constant lives here. No magic numbers in code, ever. This whole block is copied verbatim into dispatch.json.assumptions so Screen 4 needs no second fetch — see docs/Schema.md section 4.",
+
+  "tariff_rm_per_kwh": 0.4899,
+  "assumed_yield_kwh_per_kwp_day": 3.8,
+  "cost_per_visit_rm": 1500,
+  "dispatch_threshold_rm_per_month": 1500,
+  "min_cohort_size": 5,
+  "baseline_visit_frequency_per_year": 12,
+  "sub_site_deviation_threshold": -0.15,
+  "min_plausible_performance_index": 2.0,
+
+  "tariff_rm_per_kwh_range": {
+    "low": 0.4359,
+    "high": 0.5259
+  },
+  "cost_per_visit_rm_range": {
+    "low": 800,
+    "high": 2500
+  },
+
+  "co2e_grid_factor_kg_per_kwh": 0.740,
+
+  "tier": "Tier 2 — labelled assumption, see PRD v2 section 6",
+
+  "notes": {
+    "tariff_rm_per_kwh": "Malaysian RP4, in force 1 Jul 2025 to 31 Dec 2027. Base total 45.4 sen/kWh plus AFA 3.59 sen/kWh = 48.99 sen = RM 0.4899. Base and AFA are Tier 1 (widely reported). Source: https://www.mytnb.com.my/business/understand-your-bill/pricing-tariff",
+    "tariff_rm_per_kwh_range": "RP4 is a four-component structure plus AFA, not a flat rate. The component split is a secondary source, so the rate ships as a range: 40.0 to 49.0 sen base plus AFA. The dispatch conclusion must hold at the low end — see PRD v2 section 13 item 5.",
+    "cost_per_visit_rm": "Tier 2 assumption. No public figure exists for Malaysian C&I site-visit cost. Mid point of an 800 to 2500 range covering technician time, travel and mobilisation.",
+    "cost_per_visit_rm_range": "Screen 4's pessimistic toggle recomputes headline figures at the unfavourable end of every range: lowest tariff, highest visit cost.",
+    "dispatch_threshold_rm_per_month": "A site is worth visiting when the monthly loss exceeds the cost of going. Set at the high end of the visit-cost range so a dispatch survives the worst corner of every assumption.",
+    "min_cohort_size": "Below this, the cohort control group is too weak to be meaningful. PRD v2 section 15. Cohorts under this size are flagged, never hidden.",
+    "sub_site_deviation_threshold": "An inverter is flagged when its mean daily output sits this far below the median of its siblings on the same roof. Siblings share weather perfectly, so divergence is unambiguous. Ratio-based because PVDAQ does not publish per-inverter capacity.",
+    "min_plausible_performance_index": "Data-quality floor in kWh/kWp/day. A working C&I site does not average below this anywhere the fleet operates; a site that does has incomplete telemetry, not a fault. Such sites are excluded from detection AND from their cohort median, because a permanently depressed reading both generates a false dispatch and drags the peer baseline down. Exclusion is stated on screen, never silent.",
+    "assumed_yield_kwh_per_kwp_day": "Nominal specific yield used only for sanity checks and demo estimates, never as a substitute for the M2 physics baseline.",
+    "baseline_visit_frequency_per_year": "Calendar-driven visit cadence the product replaces. Twelve equals monthly.",
+    "co2e_grid_factor_kg_per_kwh": "Tier 1. Malaysia grid emission factor, Energy Commission 2024. Recovered generation times this factor gives tCO2e avoided for the ESG rubric row."
+  }
+}

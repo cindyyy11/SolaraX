@@ -96,8 +96,33 @@ Start with [`docs/PRD.md`](./docs/PRD.md) for what we're building, or
 
 ## Running it
 
-⬜ **Not yet runnable.** Target: Modules 1→4 end-to-end from one command on a clean machine.
-Instructions land here when that is true, not before.
+⬜ **Pipeline not yet runnable end-to-end.** Target: Modules 1→4 from one command on a clean
+machine. Full instructions land here when that is true, not before.
+
+### Frontend (`apps/web`)
+
+Requires Node.js `^22.18.0 || >=24.12.0` and npm.
+
+```powershell
+cd apps/web
+npm install
+npm run dev
+```
+
+Other scripts: `npm run build` (production build) · `npm run test:unit` (Vitest) ·
+`npm run lint` (ESLint) · `npm run format` (Prettier).
+
+Copy `apps/web/.env.example` to `apps/web/.env.local` and adjust `VITE_*` values as needed.
+
+### Pipeline
+
+Requires Python 3.11 (see [`CLAUDE.md`](./CLAUDE.md) — local is currently 3.14).
+
+```powershell
+python pipeline/explore_bucket.py pvdaq/    # list S3 paths, no download
+```
+
+Remaining pipeline commands land as the modules do.
 
 ## Licence
 
