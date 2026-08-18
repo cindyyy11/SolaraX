@@ -1,0 +1,14 @@
+source_system_id,name,site_location,lat,lon,capacity_kwp,kg_climate,mount_type,first_ts,last_ts,qa_status,cohort_id
+1203,Distributed Sun - EJ DeSeta,"Wilmington, DE",39.7325,-75.5511,197.47,Cfa,roof,1/19/2011 9:00,7/26/2020 17:05,pass,DSUN-01
+1201,Distributed Sun - 5 Executive Campus,"Cherry Hill, NJ",39.9283,-75.0481,140.14,Cfa,roof,1/24/2011 11:13,7/26/2020 17:00,pass,DSUN-01
+1199,Distributed Sun - Hunt Valley,"Cockeysville, MD",39.4856,-76.6636,52.92,Cfa,roof,5/26/2010 9:45,7/26/2020 17:00,pass,DSUN-01
+1200,Distributed Sun - BWI Hilton,"Linthicum Heights, MD",39.1958,-76.6808,51.84,Cfa,roof,10/3/2010 12:15,7/26/2020 17:00,pass,DSUN-01
+1202,Distributed Sun - 6 Executive Campus,"Cherry Hill, NJ",39.9292,-75.0472,51.84,Cfa,roof,12/29/2010 14:30,7/26/2020 17:05,pass,DSUN-01
+1367,[1367] City of Henderson-NV - Aquatic Complex,"Henderson, NV",36.033,-114.9516,277.16,Bwh,unknown,5/8/2013 10:42,5/24/2020 17:45,pass,VEGAS-01
+1278,Andre Agassi Preparatory Academy - Building D,"Las Vegas, NV",36.1952,-115.1582,171.36,Bwh,roof,8/30/2011 23:00,7/26/2020 16:00,pass,VEGAS-01
+34,Andre Agassi Preparatory Academy - Building A,"Las Vegas, NV",36.1952,-115.1582,146.64,Bwh,roof,8/23/2010 11:13,7/26/2020 15:45,pass,VEGAS-01
+35,Andre Agassi Preparatory Academy - Gymnasium,"Las Vegas, NV",36.1952,-115.1582,121.68,Bwh,roof,8/23/2010 7:49,7/26/2020 15:45,pass,VEGAS-01
+1276,Andre Agassi Preparatory Academy - Building B,"Las Vegas, NV",36.1952,-115.1582,68.48,Bwh,roof,8/30/2011 23:00,7/26/2020 16:00,pass,VEGAS-01
+1277,Andre Agassi Preparatory Academy - Building C,"Las Vegas, NV",36.1952,-115.1582,40.56,Bwh,roof,8/30/2011 23:00,7/26/2020 16:00,pass,VEGAS-01
+1332,NREL Parking Garage,"Golden, CO",39.7388,-105.1732,1153.488,BSk,roof,3/29/2013 12:01,5/7/2024 14:30,pass,GOLDEN-01
+1283,NREL Research Support Facility II,"Golden, CO",39.7409,-105.1711,408.24,BSk,roof,2/19/1997 3:15,5/7/2024 14:45,pass,GOLDEN-01

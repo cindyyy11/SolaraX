@@ -1,0 +1,60 @@
+# --- Data -------------------------------------------------------------------
+# See the data/ rule in CLAUDE.md. Short version: processed aggregates are small
+# and travel with the repo; raw day-files and anything bulk never do.
+
+# Raw day-file cache and download manifests. This is where bulk accumulates.
+data/raw/
+
+# Parquet is binary, so git stores a FULL COPY on every change rather than a
+# diff. Ignore it everywhere by default...
+*.parquet
+
+# ...except the processed aggregates, which are ~115 KB in total and let a
+# teammate start on M2/M3 without a 40 MB pull. Keep an eye on the size: if
+# these grow past ~1 MB, drop the exemption rather than letting history swell.
+!data/processed/*.parquet
+
+# The PVGIS Klang pull is a small reference artifact for the pitch, tracked
+# deliberately.
+!data/pvgis-bukit-raja-klang.json
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node -------------------------------------------------------------------
+# apps/web/.gitignore covers the frontend in detail; these catch strays
+# anywhere else in the tree.
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# --- Environment ------------------------------------------------------------
+# .env.example IS committed — it documents which variables exist without
+# leaking any values.
+.env
+.env.*
+!.env.example
+
+# --- Editors and OS ---------------------------------------------------------
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- Scratch ----------------------------------------------------------------
+*.log
+tmp/
+scratch/
