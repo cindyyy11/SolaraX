@@ -34,6 +34,8 @@ export interface Assumptions {
   tariff_rm_per_kwh_range?: { low: number; high: number }
   cost_per_visit_rm_range?: { low: number; high: number }
   co2e_grid_factor_kg_per_kwh?: number
+  /** Schema 1.5.0. Sites within this distance are one mobilisation. */
+  same_trip_radius_km?: number
   /**
    * Schema 1.4.0. Derived reference estimate — modelled Malaysian specific
    * yield, NOT a measurement. Distinct from `assumed_yield_kwh_per_kwp_day`,
@@ -52,23 +54,61 @@ export interface FleetSummary {
   dispatch_count: number
   monitor_count: number
   healthy_count: number
+  /** Counts SITES. Use for "the value is in the sites you don't visit". */
   visits_avoided: number
+  /**
+   * Schema 1.5.0. Counts TRIPS — sites within `same_trip_radius_km` are one
+   * mobilisation, and a group holding a dispatched site is not avoided at all
+   * because the technician is already going there. This drives the money;
+   * `visits_avoided` does not. Say sites when counting sites, trips when
+   * counting ringgit.
+   */
+  trips_avoided: number
+  trips_recommended: number
+  trip_groups: TripGroup[]
+  /** `trips_avoided x cost_per_visit_rm`. */
   estimated_saving_rm: number
   total_rm_at_risk: number
   cohort_count: number
 }
 
+/** Schema 1.5.0. Sites reachable in one mobilisation. Partitions `sites`. */
+export interface TripGroup {
+  trip_id: string
+  label: string
+  site_ids: string[]
+  site_count: number
+  dispatched: boolean
+}
+
 export interface Roi {
   data_status: DataStatus
+  /** Months actually observed. Every `_total` equals its value x this. */
   period_months: number
+  /** Trips, not sites — the cost is per mobilisation. */
   visits_recommended_total: number
   visits_avoided_total: number
-  faults_confirmed: number
+  /**
+   * Schema 1.5.0. Name is fixed by the contract but the value is generation AT
+   * RISK — nothing has been recovered. Render `generation_basis`, or use wording
+   * consistent with it; a basis field the UI ignores changes nothing.
+   */
   generation_recovered_kwh: number
+  generation_basis?: string
+  /** 0 until findings are persisted. Screen 3 writes to localStorage only. */
+  faults_confirmed: number
+  faults_confirmed_basis?: string
   rm_protected_cumulative: number
   co2e_avoided_tonnes?: number
   co2e_grid_factor_kg_per_kwh?: number
   co2e_factor_source?: string
+  /** Schema 1.5.0. Anything beyond the observed period lives here, visibly. */
+  projection?: {
+    horizon_months: number
+    factor: number
+    saving_rm?: number
+    basis: string
+  }
 }
 
 export interface Cohort {

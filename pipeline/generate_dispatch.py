@@ -30,6 +30,7 @@ freezing the schema.
 import csv
 import datetime
 import json
+import math
 import os
 
 # --- Paths ------------------------------------------------------------------
@@ -49,7 +50,7 @@ FRONTEND_PUBLIC_DIR = os.path.join(REPOSITORY_ROOT, "apps", "web", "public")
 # These are not commercial constants (those live in config/assumptions.json).
 # They describe the shape of the artifact and the date axis.
 
-SCHEMA_VERSION = "1.4.0"
+SCHEMA_VERSION = "1.5.0"
 PIPELINE_VERSION = "0.4.0-placeholder"
 
 SERIES_DAY_COUNT = 90          # docs/Schema.md section 8.6
@@ -802,13 +803,92 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
     return dispatch_sites + monitor_sites + healthy_sites
 
 
+EARTH_RADIUS_KM = 6371.0088
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    """Great-circle distance in km. Stdlib only — no geo dependency for this."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = phi2 - phi1
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+
+
+def group_sites_into_trips(site_objects, radius_km):
+    """Cluster sites that one technician reaches in a single mobilisation.
+
+    WHY THIS EXISTS. Costing a saved visit per SITE overstates the saving badly on
+    this fleet. Five of the Agassi buildings share byte-identical coordinates, and
+    two more pairs sit within 300 m — nobody drives out five times to one address.
+    CLAUDE.md already states the caveat; this is the code that honours it.
+
+    Single-link clustering: two sites join the same trip if they are within
+    radius_km of each other, and a chain of such links merges transitively. Single
+    link is the right choice because reachability chains — A near B, B near C means
+    one route covers all three even when A and C are further apart than the radius.
+
+    Returns a list of lists of site_objects, order stable for a stable input.
+    """
+    groups = []
+    for site in site_objects:
+        joined = None
+        for group in groups:
+            if any(haversine_km(site["lat"], site["lon"], other["lat"], other["lon"]) <= radius_km
+                   for other in group):
+                if joined is None:
+                    # First group this site links to — join it.
+                    group.append(site)
+                    joined = group
+                else:
+                    # It also links to a later group, so this site is the bridge
+                    # between two clusters that were only separate because nothing
+                    # had connected them yet. Merge.
+                    joined.extend(group)
+                    group.clear()
+        if joined is None:
+            groups.append([site])
+
+    return [group for group in groups if group]
+
+
+def build_trip_groups(site_objects, assumptions):
+    """Trip groups plus the counts that drive the saving. See §1.1 of issue #4."""
+    radius_km = assumptions["same_trip_radius_km"]
+    groups = group_sites_into_trips(site_objects, radius_km)
+
+    trip_groups = []
+    for index, members in enumerate(groups, start=1):
+        # A trip is only AVOIDED when nothing in the group is being dispatched.
+        # If a technician is already going to that address for one site, skipping
+        # its neighbours saves the drive, not the visit.
+        dispatched = any(member["status"] == "dispatch" for member in members)
+        trip_groups.append({
+            "trip_id": "T-{:02d}".format(index),
+            "label": members[0]["address"],
+            "site_ids": [member["site_id"] for member in members],
+            "site_count": len(members),
+            "dispatched": dispatched,
+        })
+
+    return trip_groups
+
+
 def build_fleet_summary(site_objects, cohorts, assumptions):
     dispatch_count = sum(1 for item in site_objects if item["status"] == "dispatch")
     monitor_count = sum(1 for item in site_objects if item["status"] == "monitor")
     healthy_count = sum(1 for item in site_objects if item["status"] == "healthy")
 
     total_capacity_kwp = sum(item["capacity_kwp"] for item in site_objects)
+
+    # visits_avoided counts SITES and is left alone: it is what Screen 1 reads and
+    # what the sentence "the value is in the sites you don't visit" refers to.
+    # The money, though, is per trip — see build_trip_groups.
     visits_avoided = len(site_objects) - dispatch_count
+
+    trip_groups = build_trip_groups(site_objects, assumptions)
+    trips_recommended = sum(1 for group in trip_groups if group["dispatched"])
+    trips_avoided = len(trip_groups) - trips_recommended
 
     total_rm_at_risk = sum(
         item["economics"]["rm_at_risk_monthly"]
@@ -823,29 +903,84 @@ def build_fleet_summary(site_objects, cohorts, assumptions):
         "monitor_count": monitor_count,
         "healthy_count": healthy_count,
         "visits_avoided": visits_avoided,
-        "estimated_saving_rm": round(visits_avoided * assumptions["cost_per_visit_rm"], 2),
+        "trips_avoided": trips_avoided,
+        "trips_recommended": trips_recommended,
+        "trip_groups": trip_groups,
+        "estimated_saving_rm": round(trips_avoided * assumptions["cost_per_visit_rm"], 2),
         "total_rm_at_risk": round(total_rm_at_risk, 2),
         "cohort_count": len(cohorts),
     }
 
 
+PROJECTION_HORIZON_MONTHS = 12
+
+
 def build_roi(fleet_summary, assumptions):
-    """Screen 4 rolling totals. TODO(owner B): real ESG figures. SIMULATED for the MVP."""
-    period_months = 6
-    generation_recovered_kwh = round(fleet_summary["total_rm_at_risk"] / assumptions["tariff_rm_per_kwh"] * period_months, 1)
+    """Screen 4 figures for the observed period.
+
+    WHAT CHANGED AND WHY. This function used to multiply one month by six and
+    present the result as rolling history. It also set faults_confirmed to
+    dispatch_count * 2, which was invented outright — there is no confirmation
+    mechanism at all, because Screen 3's findings live in the browser's
+    localStorage with nothing behind them.
+
+    The pipeline observes ONE reporting month. So this reports one month, and
+    anything beyond that goes in `projection`, where it is visibly a projection
+    with its factor and its assumption stated. Multiplying inside a field named
+    `_total` hid both.
+
+    `generation_recovered_kwh` keeps its name because renaming a field breaks the
+    frozen contract, but it now carries generation AT RISK — nothing has been
+    recovered, and `generation_basis` says so.
+
+    Stays PLACEHOLDER until M2/M3 supply a real kwh_lost. Every figure below is
+    arithmetic on a made-up loss fraction; the arithmetic is now honest, the
+    input is not yet.
+    """
+    period_months = 1
+    tariff = assumptions["tariff_rm_per_kwh"]
     co2e_factor = assumptions["co2e_grid_factor_kg_per_kwh"]
 
+    generation_at_risk_kwh = round(fleet_summary["total_rm_at_risk"] / tariff, 1)
+
     return {
-        "data_status": "SIMULATED",
+        "data_status": "PLACEHOLDER",
         "period_months": period_months,
-        "visits_recommended_total": fleet_summary["dispatch_count"] * period_months,
-        "visits_avoided_total": fleet_summary["visits_avoided"] * period_months,
-        "faults_confirmed": fleet_summary["dispatch_count"] * 2,
-        "generation_recovered_kwh": generation_recovered_kwh,
-        "rm_protected_cumulative": round(generation_recovered_kwh * assumptions["tariff_rm_per_kwh"], 2),
-        "co2e_avoided_tonnes": round(generation_recovered_kwh * co2e_factor / 1000, 2),
+
+        # Trips, not sites: the cost is per mobilisation. See build_trip_groups.
+        "visits_recommended_total": fleet_summary["trips_recommended"],
+        "visits_avoided_total": fleet_summary["trips_avoided"],
+
+        "faults_confirmed": 0,
+        "faults_confirmed_basis": (
+            "No confirmation mechanism exists. Screen 3 stores technician findings in browser "
+            "localStorage with no backend, so nothing can be counted as confirmed. This stays 0 "
+            "until findings are persisted — it is not a measurement of zero faults."
+        ),
+
+        "generation_recovered_kwh": generation_at_risk_kwh,
+        "generation_basis": (
+            "Generation AT RISK this month, not recovered. Nothing has been recovered: no site has "
+            "been visited and no fault repaired. Derived from total_rm_at_risk at the fleet tariff. "
+            "The field name is fixed by the schema contract; this note is what it actually means."
+        ),
+
+        "rm_protected_cumulative": round(generation_at_risk_kwh * tariff, 2),
+        "co2e_avoided_tonnes": round(generation_at_risk_kwh * co2e_factor / 1000, 2),
         "co2e_grid_factor_kg_per_kwh": co2e_factor,
         "co2e_factor_source": assumptions["notes"]["co2e_grid_factor_kg_per_kwh"],
+
+        "projection": {
+            "horizon_months": PROJECTION_HORIZON_MONTHS,
+            "factor": PROJECTION_HORIZON_MONTHS / period_months,
+            "saving_rm": round(
+                fleet_summary["estimated_saving_rm"] * PROJECTION_HORIZON_MONTHS / period_months, 2),
+            "basis": (
+                "Straight-line projection of a single observed month over {} months. Assumes this "
+                "month is representative, which one month of data cannot establish. Shown as a "
+                "projection so it is never mistaken for observed history."
+            ).format(PROJECTION_HORIZON_MONTHS),
+        },
     }
 
 
