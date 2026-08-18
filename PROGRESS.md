@@ -126,6 +126,8 @@ Tracked in detail in [`docs/DECISIONS.md`](./docs/DECISIONS.md) §7 and
 [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §9. The ones that affect this week:
 
 1. Can the deck and summary be re-uploaded before the lock? Everything about Risk 1 depends on it.
-2. Who holds which of the five roles? Never recorded after the 10 Aug poll.
+2. ~~Who holds which of the five roles?~~ ✅ **Resolved 18 Aug** — Cindy AI/ML (A) · MK Data (C) ·
+   Chang Zhe Full-Stack (D) · Zhuo Heng Product (E) · Xin Rou Computer Vision (B). See
+   [`docs/DECISIONS.md`](./docs/DECISIONS.md) §1.
 3. What is FastAPI's role — it isn't on the data path in the approved architecture diagram.
 4. RP4 component rates from a TNB primary source, or ship as a labelled Tier-2 range.
