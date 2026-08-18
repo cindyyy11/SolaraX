@@ -3,8 +3,8 @@
 **What it answers:** *"This is a Malaysian competition. Why is all your generation data American?"*
 
 **The honest answer, in one line:** no openly reusable per-site Malaysian inverter time series
-exists, so we prove the method on a real US fleet and model the Malaysian half from real Malaysian
-satellite weather — and we never mix the two.
+exists, so we prove the method on a real US fleet and model the Malaysian half from a real
+meteorological reanalysis at real Malaysian coordinates — and we never mix the two.
 
 Artifact: [`data/malaysia_reference_cases.json`](../data/malaysia_reference_cases.json) ·
 Generator: [`pipeline/fetch_malaysia_reference.py`](../pipeline/fetch_malaysia_reference.py)
@@ -17,7 +17,7 @@ Three distinct things get confused in this conversation. They are not interchang
 
 | | Available? | What we do with it |
 |---|---|---|
-| Malaysian **satellite weather** (irradiance, temperature) | ✅ Free, PVGIS-ERA5 | The reference cases below |
+| Malaysian **reanalysis weather** (irradiance, temperature) | ✅ Free, PVGIS-ERA5 | The reference cases below |
 | Malaysian **published performance studies** | ✅ Several | Sanity band — [`RESEARCH.md`](./RESEARCH.md) §2 |
 | Malaysian **per-site inverter time series** | ❌ None openly reusable | Nothing. This is the gap |
 
@@ -55,7 +55,7 @@ is accepted silently.**
 | Parameter | Value | Why |
 |---|---|---|
 | Endpoint | `PVcalc` (v5_2) | Returns modelled PV *production*. `seriescalc` returns weather only |
-| Radiation database | PVGIS-ERA5, **2005–2020** | A yield figure is meaningless without its averaging period |
+| Radiation database | **PVGIS-ERA5**, 2005–2020 | Set explicitly, never defaulted. **PVGIS-SARAH2 rejects these coordinates** — *"Location out of the spatial coverage"* — because Meteosat does not see 101–104°E. ERA5 is the only option here, not a preference |
 | Reference system | 100 kWp | Arbitrary but fixed; everything is normalised to kWh/kWp/day |
 | Mounting | **building-integrated** | Roof-mounted modules sit against a warm surface with restricted airflow, run hotter, and yield less. Our buyer owns rooftops |
 | Tilt | **10°** | Malaysian rooftop practice — enough for rain to drain and self-clean, low wind load. At 1–5°N horizontal is already near the irradiance optimum, so 10° costs almost nothing |
@@ -70,6 +70,25 @@ An earlier pass used PVGIS's defaults — **free-standing, 0° tilt** — and pr
 
 **Roof-mounting alone costs about 4%.** Any Malaysian yield figure quoted without its mounting,
 tilt and loss assumptions is not a number, it is a vibe.
+
+### Call ERA5 what it is — a reanalysis, not a satellite product
+
+**PVGIS-ERA5 is ECMWF's meteorological *reanalysis*.** It assimilates satellite and ground
+observations into a physically consistent model of the atmosphere, but it is **not itself a
+satellite dataset**. Write *"ERA5 meteorological reanalysis"*, never *"satellite weather"*.
+
+This is not pedantry. Sensor independence is the core technical claim in
+[`CLAUDE.md`](../CLAUDE.md) — *"any claim requiring on-site irradiance sensors"* is an anti-goal —
+so the provenance of the off-site data has to be stated exactly, or the wedge is describable as
+loose. Two different sources are in play and they are not the same kind of thing:
+
+| Where | Source | What it actually is |
+|---|---|---|
+| US pipeline baseline (M2) | NASA POWER | Solar fields derived from **satellite** observation (CERES) |
+| Malaysian reference cases | PVGIS-ERA5 | **Reanalysis** (ECMWF ERA5) |
+
+Both are off-site and neither needs a sensor at the plant, so the wedge holds either way. Just don't
+call the second one satellite.
 
 ### Known optimism in the 14% loss figure
 
@@ -137,11 +156,22 @@ transferability.
 ## 6. Reproducing
 
 ```bash
+python -m venv .venv && source .venv/bin/activate      # see the note below
+pip install -r pipeline/requirements.txt
+
 python pipeline/fetch_malaysia_reference.py --dry-run   # print, write nothing
 python pipeline/fetch_malaysia_reference.py             # rewrite the artifact
 python pipeline/fleet_median.py                         # observed side, from parquet
 ```
 
-No API key. PVGIS is a free public service of the European Commission's Joint Research Centre.
+`fetch_malaysia_reference.py` needs no dependencies beyond the standard library and no API key —
+PVGIS is a free public service of the European Commission's Joint Research Centre. It exits non-zero
+if `assumptions.json` has drifted from the artifact, so it is safe to run in CI.
+
+`fleet_median.py` needs **pandas and pyarrow**. Both are declared in
+[`pipeline/requirements.txt`](../pipeline/requirements.txt), but a system Python often has pandas
+without the parquet engine, which fails as *"Unable to find a usable engine"* rather than as a
+missing import. Use the venv. `CLAUDE.md` also notes Python 3.11 is preferred — 3.14 works for these
+two scripts, but M2's `pvlib` and `scikit-learn` may not have wheels for it.
 
 *Generated 18 Aug 2026 · owner C (Data) · issue [#2](https://github.com/cindyyy11/SolaraX/issues/2)*

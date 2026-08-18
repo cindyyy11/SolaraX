@@ -34,6 +34,14 @@ export interface Assumptions {
   tariff_rm_per_kwh_range?: { low: number; high: number }
   cost_per_visit_rm_range?: { low: number; high: number }
   co2e_grid_factor_kg_per_kwh?: number
+  /**
+   * Schema 1.4.0. Derived reference estimate — modelled Malaysian specific
+   * yield, NOT a measurement. Distinct from `assumed_yield_kwh_per_kwp_day`,
+   * which is a sanity-check floor on the US fleet. Do not merge them.
+   * Provenance: docs/MALAYSIA-REFERENCE.md
+   */
+  malaysia_reference_yield_kwh_per_kwp_day?: number
+  malaysia_reference_yield_kwh_per_kwp_day_range?: { low: number; high: number }
   tier: string
   notes?: Record<string, string>
 }

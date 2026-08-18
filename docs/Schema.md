@@ -1,6 +1,6 @@
 # SolaraX — `dispatch.json` Schema
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Status:** FROZEN as of 15 Aug 2026
 **Owner:** D (Full-Stack)
 **Consumers:** `frontend/src/api.js` (all four screens)
@@ -162,6 +162,8 @@ recomputes or overrides it.**
   "dispatch_threshold_rm_per_month": 700,
   "min_cohort_size": 5,
   "baseline_visit_frequency_per_year": 12,
+  "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
+  "malaysia_reference_yield_kwh_per_kwp_day_range": { "low": 3.523, "high": 3.901 },
   "tier": "Tier 2 — labelled assumption, see PRD §6",
   "notes": {
     "tariff_rm_per_kwh": "Derived from PRD §4 Screen 1 worked figures.",
@@ -174,6 +176,35 @@ recomputes or overrides it.**
 All numeric fields required. `notes` optional but strongly encouraged — it is
 literally the answer to "where did that number come from," which PRD §13 item 4
 says will be asked.
+
+### Screen 4 rendering rules
+
+Two conventions the frontend depends on, so a new constant renders correctly:
+
+- **Any scalar** in this block becomes a row in Screen 4's assumptions table,
+  paired with its `notes` entry. A constant with no note renders a blank source
+  cell, which is the thing PRD §13 item 4 warns about — always add the note.
+- **A `<key>_range` object** is attached to that key's row and displayed beside
+  the value. It does **not** automatically join the pessimistic-case toggle:
+  that reads `tariff_rm_per_kwh_range` and `cost_per_visit_rm_range` by name.
+  Adding a range for anything else is display-only, by design — the toggle
+  models commercial downside, not model uncertainty.
+
+### `malaysia_reference_yield_kwh_per_kwp_day` — 1.4.0
+
+A **derived reference estimate**, not a measurement and not Tier 1: mean modelled
+specific yield across four real Malaysian coordinates, PVGIS-ERA5 reanalysis
+through PVGIS's physical PV model. It depends entirely on chosen tilt, mounting,
+losses, technology, coordinates and averaging period.
+
+**It is not interchangeable with `assumed_yield_kwh_per_kwp_day`.** That one is a
+general sanity-check floor applied to the *US* fleet; this one is a Malaysian
+modelled reference. They currently sit close together by coincidence. Merging
+them would silently change what the sanity check means.
+
+Method and provenance: [`MALAYSIA-REFERENCE.md`](./MALAYSIA-REFERENCE.md).
+Regenerate with `pipeline/fetch_malaysia_reference.py`, which fails if
+`assumptions.json` has drifted from the artifact.
 
 ---
 
@@ -575,6 +606,7 @@ stops scaffolding shipping to a judge.
 | 1.0.0 | 15 Aug 2026 | Initial frozen schema (D) |
 | 1.1.0 | 15 Aug 2026 | Added §1.1 transport note (canonical file vs. Supabase serving layer, with required frontend fallback). Added `meta.irradiance_source` and `evidence.inference_mode`. Confirmed the `pvdaq_1276` example resolves to a real bucket path. Additive only — no field renamed or removed (D) |
 | 1.2.0 | 17 Aug 2026 | Added `sites[].sub_site` — per-inverter comparison against sibling median, with optional per-unit `thermal`. Deviates from BUILD_PLAN §8's draft by using `mean_kwh_daily` + `deviation_pct` instead of `performance_index`: PVDAQ publishes no per-inverter capacity, so a kWh/kWp figure at that level would be fabricated. Additive only (D) |
+| 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
 | 1.3.0 | 17 Aug 2026 | Added `sites[].excluded_from_analysis` and cohort `analysed_site_ids` / `analysed_count` / `excluded_site_ids`. A site whose telemetry falls below `assumptions.min_plausible_performance_index` is forced `healthy`, never ranked, and never drawn as a peer. `meets_minimum` is now judged on `analysed_count`, not raw membership. Additive only (D) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
