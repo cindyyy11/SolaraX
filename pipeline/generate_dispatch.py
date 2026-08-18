@@ -27,6 +27,7 @@ frontend cannot tell the difference structurally, which is the entire point of
 freezing the schema.
 """
 
+import argparse
 import csv
 import datetime
 import json
@@ -126,12 +127,14 @@ def remap_date(iso_date):
         return parsed.replace(year=parsed.year + year_shift, day=28).isoformat()
 
 
-def load_real_daily_series():
+def load_real_daily_series(path=None):
     """Return real daily data keyed by site_id, or None when M1 has not run yet.
 
     Expected columns: site_id, date, kwh, capacity_kwp, performance_index.
+    `path` lets an injected run read the synthetic series instead — see main().
     """
-    if not os.path.exists(FLEET_DAILY_PATH):
+    path = path or FLEET_DAILY_PATH
+    if not os.path.exists(path):
         return None
 
     try:
@@ -140,7 +143,7 @@ def load_real_daily_series():
         print("  ! fleet_daily.parquet exists but pandas is not installed — using placeholder series")
         return None
 
-    frame = pandas.read_parquet(FLEET_DAILY_PATH)
+    frame = pandas.read_parquet(path)
     series_by_site = {}
     for site_id, group in frame.groupby("site_id"):
         ordered = group.sort_values("date")
@@ -155,21 +158,22 @@ def load_real_daily_series():
     return series_by_site
 
 
-def load_inverter_daily():
+def load_inverter_daily(path=None):
     """Per-inverter daily energy, keyed by site_id, or None when unavailable.
 
     Enables the sub-site view: each inverter compared against the median of its
     siblings on the same roof. Siblings share weather perfectly, so divergence
     between them is unambiguous in a way site-to-site comparison never is.
     """
-    if not os.path.exists(INVERTER_DAILY_PATH):
+    path = path or INVERTER_DAILY_PATH
+    if not os.path.exists(path):
         return None
     try:
         import pandas
     except ImportError:
         return None
 
-    frame = pandas.read_parquet(INVERTER_DAILY_PATH)
+    frame = pandas.read_parquet(path)
     by_site = {}
     for site_id, site_group in frame.groupby("site_id"):
         units = {}
@@ -1016,16 +1020,49 @@ def build_meta(site_objects, using_real_data):
     }
 
 
-def build_dispatch_payload():
-    """Assemble the whole artifact. Returns the dict that becomes dispatch.json."""
+FLEET_INJECTED_PATH = os.path.join(REPOSITORY_ROOT, "data", "processed",
+                                   "fleet_daily_injected.parquet")
+INVERTER_INJECTED_PATH = os.path.join(REPOSITORY_ROOT, "data", "processed",
+                                      "inverter_daily_injected.parquet")
+
+
+def build_dispatch_payload(injected=False):
+    """Assemble the whole artifact. Returns the dict that becomes dispatch.json.
+
+    `injected=True` reads the synthetic series written by fault_injection.py,
+    for M3 validation runs. Never the default: the canonical artifact the
+    dashboard serves is always built from real measurements.
+    """
     assumptions = load_assumptions()
     sites = load_fleet_sites()
-    real_series_by_site = load_real_daily_series()
-    inverter_by_site = load_inverter_daily()
+
+    if injected:
+        if not os.path.exists(FLEET_INJECTED_PATH):
+            raise SystemExit(
+                "--injected needs {}. Run pipeline/fault_injection.py --ladder first.".format(
+                    os.path.relpath(FLEET_INJECTED_PATH, REPOSITORY_ROOT)))
+        real_series_by_site = load_real_daily_series(FLEET_INJECTED_PATH)
+        inverter_by_site = load_inverter_daily(INVERTER_INJECTED_PATH)
+    else:
+        real_series_by_site = load_real_daily_series()
+        inverter_by_site = load_inverter_daily()
+
     thermal_by_site = load_inverter_thermal()
     hardware_by_site = load_inverter_hardware()
 
-    exclusions = build_exclusions(sites, real_series_by_site, assumptions)
+    # EXCLUSIONS COME FROM THE PRE-INJECTION SERIES, ALWAYS.
+    #
+    # build_exclusions drops any site averaging below
+    # min_plausible_performance_index, reading it as incomplete telemetry rather
+    # than a fault. Feed it injected data and a severe injection removes the site
+    # from the analysis entirely — deleting the very test case it was meant to
+    # create, with no error. The label would then match nothing and the recall
+    # figure would be quietly wrong.
+    #
+    # Data quality is a property of the FEED, not of the fault we added, so it is
+    # judged on what the feed actually delivered.
+    exclusion_series = load_real_daily_series() if injected else real_series_by_site
+    exclusions = build_exclusions(sites, exclusion_series, assumptions)
 
     sites_by_cohort = group_sites_by_cohort(sites)
     cohorts = build_cohorts(sites_by_cohort, assumptions, exclusions)
@@ -1096,7 +1133,24 @@ def publish_to_frontend(source_path=OUTPUT_PATH):
 
 
 def main():
-    payload = build_dispatch_payload()
+    parser = argparse.ArgumentParser(description="Build pipeline/output/dispatch.json")
+    parser.add_argument("--injected", action="store_true",
+                        help="build from fault_injection.py's synthetic series, for M3 validation. "
+                             "Writes beside the canonical artifact and does NOT publish to the "
+                             "frontend — a synthetic run must never become what the dashboard serves.")
+    args = parser.parse_args()
+
+    payload = build_dispatch_payload(injected=args.injected)
+
+    if args.injected:
+        output_path = os.path.join(OUTPUT_DIRECTORY, "dispatch_injected.json")
+        written_path = write_dispatch_file(payload, output_path)
+        print("wrote {}".format(written_path))
+        print("  NOT published to the frontend — synthetic run")
+        print("  validate with: python pipeline/validate_dispatch.py {}".format(
+            os.path.relpath(written_path, REPOSITORY_ROOT)))
+        return
+
     written_path = write_dispatch_file(payload)
     published = publish_to_frontend(written_path)
 

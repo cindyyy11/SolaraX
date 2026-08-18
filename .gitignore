@@ -14,6 +14,15 @@ data/raw/
 # these grow past ~1 MB, drop the exemption rather than letting history swell.
 !data/processed/*.parquet
 
+# ...but NEVER the injected ones. Synthetic generation data does not belong in a
+# publicly judged repo sitting beside the real measurements — a reader cannot
+# tell them apart from the filename alone, and that is exactly the confusion the
+# BUILT/SIMULATED discipline exists to prevent. Regenerate with a seed instead:
+#   python pipeline/fault_injection.py --ladder --seed 42
+data/processed/*_injected.parquet
+pipeline/output/ground_truth.json
+pipeline/output/dispatch_injected.json
+
 # The PVGIS Klang pull is a small reference artifact for the pitch, tracked
 # deliberately.
 !data/pvgis-bukit-raja-klang.json
