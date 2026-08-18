@@ -617,8 +617,55 @@ Written by `fault_injection.py`. Present only on sites carrying an injected faul
 }
 ```
 
-Also mirrored to `pipeline/output/ground_truth.json` as a standalone file so A
-can load labels without parsing the whole dispatch payload.
+`affected_capacity_kwp` is **deliberately omitted** by
+`pipeline/fault_injection.py`. PVDAQ publishes no per-inverter DC capacity, only
+an inverter AC rating — a different quantity — so a kWp figure derived from it
+would be invented, inside the one artifact whose entire purpose is being
+trustworthy.
+
+### `ground_truth.json` — the standalone label file, 1.5.0
+
+Mirrored to `pipeline/output/ground_truth.json` so A can load labels without
+parsing the whole dispatch payload. **Gitignored** — synthetic data does not sit
+in a judged repo beside real measurements; a seed regenerates it.
+
+```json
+{
+  "data_status": "SIMULATED",
+  "generated_at": "2026-08-19T...Z",
+  "seed": 42,
+  "reversal_epsilon": 1e-09,
+  "note": "…never use as an input to detection…",
+  "source": { "fleet_daily": "data/processed/fleet_daily.parquet", "…": "…" },
+  "event_count": 4,
+  "events": [
+    {
+      "site_id": "S-1199", "unit_id": null, "fault_type": "string_loss",
+      "injected_from": "2019-03-19", "injected_until": null,
+      "magnitude_pct": 0.142857, "unit_count": 7,
+      "kwh_removed": 5298.3, "days_affected": 153,
+      "note": "SYNTHETIC — injected into real PVDAQ data. Not a real fault."
+    }
+  ]
+}
+```
+
+**Dates here are SOURCE dates (2019).** `generate_dispatch.py` applies the §9
+remap when it emits the per-site block, so the remap stays in exactly one place.
+
+Each event carries everything needed to recompute its factor per day, which is
+what makes `--verify` able to reconstruct the original series from the injected
+series plus this file alone. `kwh_removed` and `days_affected` are reporting
+fields; reversal never reads them.
+
+**`string_loss` is applied at site level**, factor `1 − 1/unit_count`, matching
+`ARCHITECTURE.md` §5's `P(t)·(1 − 1/N)`. It is the site's share lost when one of
+N units drops out — not a derating of one unit, which would cost roughly 1/N².
+
+**There is no total-outage fault.** A unit at exactly 0 is the most realistic
+dropout of all and is deliberately absent: multiplying by zero destroys the
+information, so the run would no longer be reversible. Add it only alongside
+per-row originals in this file.
 
 ---
 
@@ -679,7 +726,7 @@ stops scaffolding shipping to a judge.
 | 1.2.0 | 17 Aug 2026 | Added `sites[].sub_site` — per-inverter comparison against sibling median, with optional per-unit `thermal`. Deviates from BUILD_PLAN §8's draft by using `mean_kwh_daily` + `deviation_pct` instead of `performance_index`: PVDAQ publishes no per-inverter capacity, so a kWh/kWp figure at that level would be fabricated. Additive only (D) |
 | 1.3.0 | 17 Aug 2026 | Added `sites[].excluded_from_analysis` and cohort `analysed_site_ids` / `analysed_count` / `excluded_site_ids`. A site whose telemetry falls below `assumptions.min_plausible_performance_index` is forced `healthy`, never ranked, and never drawn as a peer. `meets_minimum` is now judged on `analysed_count`, not raw membership. Additive only (D) |
 | 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
-| 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Additive only; no field renamed or removed (C) |
+| 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Also documents `ground_truth.json`'s top-level shape and adds `assumptions.soiling_rate_per_day` / `soiling_max_loss_fraction` for `pipeline/fault_injection.py`. Additive only; no field renamed or removed (C) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.
