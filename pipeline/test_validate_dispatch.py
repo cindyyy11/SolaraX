@@ -34,7 +34,7 @@ def minimal_valid_payload():
     """
     return {
         "meta": {
-            "schema_version": "1.3.0",
+            "schema_version": "1.5.0",
             "generated_at": "2026-08-17T00:00:00Z",
             "pipeline_version": "test",
             "reporting_month": "2026-08",
@@ -51,6 +51,8 @@ def minimal_valid_payload():
             "cost_per_visit_rm": 1500,
             "dispatch_threshold_rm_per_month": 1500,
             "min_cohort_size": 5,
+            "same_trip_radius_km": 2.0,
+            "projection_horizon_months": 12,
         },
         "fleet_summary": {
             "site_count": 2,
@@ -59,16 +61,25 @@ def minimal_valid_payload():
             "monitor_count": 0,
             "healthy_count": 1,
             "visits_avoided": 1,
+            "trips_avoided": 1,
+            "trips_recommended": 1,
+            "trip_groups": [
+                {"trip_id": "T-01", "label": "Somewhere", "site_ids": ["S-0001"],
+                 "site_count": 1, "dispatched": True},
+                {"trip_id": "T-02", "label": "Elsewhere", "site_ids": ["S-0002"],
+                 "site_count": 1, "dispatched": False},
+            ],
             "estimated_saving_rm": 1500,
             "total_rm_at_risk": 500.0,
             "cohort_count": 1,
         },
         "roi": {
             "data_status": "SIMULATED",
-            "period_months": 6,
-            "visits_recommended_total": 6,
-            "visits_avoided_total": 6,
+            "period_months": 1,
+            "visits_recommended_total": 1,
+            "visits_avoided_total": 1,
             "faults_confirmed": 2,
+            "faults_confirmed_basis": "test fixture — a payload claiming confirmed faults must say what confirmed them",
             "generation_recovered_kwh": 1000.0,
             "rm_protected_cumulative": 489.9,
         },
@@ -367,6 +378,131 @@ class TestFileLevelBehaviour(unittest.TestCase):
         if not os.path.exists(validate_dispatch.DEFAULT_PATH):
             self.skipTest("no generated dispatch.json — run generate_dispatch.py first")
         self.assertEqual(validate_dispatch.validate(validate_dispatch.DEFAULT_PATH), 0)
+
+
+class TestAssumptionsBlock(unittest.TestCase):
+    """Schema.md section 4 says all numeric fields are required. Without these
+    the validator printed PASSED on an artifact the pipeline then crashed on."""
+
+    def test_missing_trip_radius_is_caught(self):
+        payload = minimal_valid_payload()
+        del payload["assumptions"]["same_trip_radius_km"]
+        self.assertTrue(failures_mentioning(run_checks(payload), "same_trip_radius_km"))
+
+    def test_missing_projection_horizon_is_caught(self):
+        payload = minimal_valid_payload()
+        del payload["assumptions"]["projection_horizon_months"]
+        self.assertTrue(failures_mentioning(run_checks(payload), "projection_horizon_months"))
+
+
+class TestTripGroupRules(unittest.TestCase):
+    """Rule 18. The saving is trips_avoided x cost_per_visit, so a wrong grouping
+    is a wrong headline number on Screen 4."""
+
+    def test_site_in_two_groups_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][1]["site_ids"] = ["S-0001"]
+        payload["fleet_summary"]["trip_groups"][1]["site_count"] = 1
+        self.assertTrue(failures_mentioning(run_checks(payload), "more than one trip group"))
+
+    def test_site_missing_from_every_group_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"].pop()
+        payload["fleet_summary"]["trips_avoided"] = 0
+        self.assertTrue(failures_mentioning(run_checks(payload), "missing from every trip group"))
+
+    def test_site_count_disagreeing_with_members_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["site_count"] = 9
+        self.assertTrue(failures_mentioning(run_checks(payload), "site_count"))
+
+    def test_trips_avoided_must_match_the_groups(self):
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trips_avoided"] = 7
+        self.assertTrue(failures_mentioning(run_checks(payload), "trips_avoided"))
+
+    def test_saving_must_equal_trips_times_cost(self):
+        """The number the whole rule exists to protect. Without this assertion a
+        correct grouping can sit beside an arbitrary saving and pass — which it
+        did, until a reviewer set it to 999999 and validation returned clean."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["estimated_saving_rm"] = 999999
+        self.assertTrue(failures_mentioning(run_checks(payload), "estimated_saving_rm"))
+
+    def test_group_naming_an_unknown_site_is_caught(self):
+        """A group naming a site that does not exist means the grouping was not
+        derived from this fleet, so nothing concluded from it can be trusted."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["site_ids"].append("S-9999")
+        payload["fleet_summary"]["trip_groups"][0]["site_count"] = 2
+        self.assertTrue(failures_mentioning(run_checks(payload), "do not exist"))
+
+    def test_empty_group_is_caught(self):
+        """An empty group still counts toward trips_avoided — free money."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"].append(
+            {"trip_id": "T-99", "label": "nowhere", "site_ids": [], "site_count": 0,
+             "dispatched": False})
+        payload["fleet_summary"]["trips_avoided"] = 2
+        self.assertTrue(failures_mentioning(run_checks(payload), "no members"))
+
+    def test_null_site_ids_is_reported_not_crashed(self):
+        """`group.get("site_ids", [])` returns None when the key exists and is
+        null, so the default never fires and iterating raises. A crash tells the
+        reader nothing."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["site_ids"] = None
+        self.assertTrue(failures_mentioning(run_checks(payload), "expected a list"))
+
+    def test_group_holding_a_dispatch_may_not_be_marked_avoided(self):
+        """The commercially important one: a technician already going to that
+        address means skipping its neighbours saves nothing. Getting this
+        backwards inflates the saving."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["dispatched"] = False
+        self.assertTrue(failures_mentioning(run_checks(payload), "contradicts its members"))
+
+
+class TestRoiNotMultiplied(unittest.TestCase):
+    """Rule 19. A previous pipeline multiplied one month by six and presented it
+    as history. A projection is fine; a hidden one is not."""
+
+    def test_inflated_total_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["roi"]["visits_avoided_total"] = payload["fleet_summary"]["trips_avoided"] * 6
+        self.assertTrue(failures_mentioning(run_checks(payload), "visits_avoided_total"))
+
+    def test_zero_period_months_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["roi"]["period_months"] = 0
+        self.assertTrue(failures_mentioning(run_checks(payload), "period_months"))
+
+    def test_confirmed_faults_without_a_basis_is_caught(self):
+        payload = minimal_valid_payload()
+        del payload["roi"]["faults_confirmed_basis"]
+        self.assertTrue(failures_mentioning(run_checks(payload), "faults_confirmed"))
+
+    def test_projection_missing_its_basis_is_caught(self):
+        payload = minimal_valid_payload()
+        payload["roi"]["projection"] = {"horizon_months": 12, "factor": 12.0}
+        self.assertTrue(failures_mentioning(run_checks(payload), "projection"))
+
+    def test_period_months_above_one_is_rejected(self):
+        """The internal-consistency check alone is not enough: scale every _total
+        by six and it passes, which is the original bug. `meta` carries a single
+        reporting_month with no window, so nothing above 1 is supported."""
+        payload = minimal_valid_payload()
+        payload["roi"]["period_months"] = 6
+        payload["roi"]["visits_avoided_total"] = payload["fleet_summary"]["trips_avoided"] * 6
+        payload["roi"]["visits_recommended_total"] = payload["fleet_summary"]["trips_recommended"] * 6
+        self.assertTrue(failures_mentioning(run_checks(payload), "period_months"))
+
+    def test_missing_trip_counts_do_not_crash_the_validator(self):
+        """A validator that raises tells the reader nothing. Rule 1 reports the
+        missing field; rule 19 must degrade quietly rather than explode."""
+        payload = minimal_valid_payload()
+        del payload["fleet_summary"]["trips_avoided"]
+        run_checks(payload)  # must not raise
 
 
 if __name__ == "__main__":

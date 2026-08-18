@@ -62,7 +62,11 @@ const headline = computed(() => {
 
   return {
     visitsAvoided: summary.value.visits_avoided,
-    savingRm: summary.value.visits_avoided * visitCost,
+    tripsAvoided: summary.value.trips_avoided,
+    // Per TRIP, not per site: sites within same_trip_radius_km are one
+    // mobilisation, and a group already receiving a dispatch is not avoided at
+    // all. Costing this per site overstated the saving by more than half.
+    savingRm: summary.value.trips_avoided * visitCost,
     atRiskRm: kwhAtRiskMonthly * tariff,
     protectedRm: generationRecovered * tariff,
     generationRecovered,
@@ -106,8 +110,8 @@ const caseComparison = computed(() => {
   const sum = summary.value
   if (!base || !sum) return null
 
-  const midSaving = sum.visits_avoided * base.cost_per_visit_rm
-  const lowSaving = sum.visits_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
+  const midSaving = sum.trips_avoided * base.cost_per_visit_rm
+  const lowSaving = sum.trips_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
   const kwhAtRisk = sum.total_rm_at_risk / base.tariff_rm_per_kwh
   const midRisk = kwhAtRisk * base.tariff_rm_per_kwh
   const lowRisk = kwhAtRisk * (base.tariff_rm_per_kwh_range?.low ?? base.tariff_rm_per_kwh)
@@ -116,7 +120,7 @@ const caseComparison = computed(() => {
   return {
     scale,
     rows: [
-      { label: 'Saving from avoided visits', mid: midSaving, low: lowSaving, good: true },
+      { label: 'Saving from avoided site trips', mid: midSaving, low: lowSaving, good: true },
       { label: 'Exposure across flagged sites', mid: midRisk, low: lowRisk, good: false },
     ],
     // The claim survives when saving still exceeds exposure at the worst corner.
@@ -157,7 +161,9 @@ const assumptionRows = computed(() => {
         </div>
         <div class="head__right">
           <DataStatusBadge :status="roi.data_status" />
-          <p class="head__note">Rolling {{ roi.period_months }} months</p>
+          <p class="head__note">
+            {{ roi.period_months }} month{{ roi.period_months === 1 ? '' : 's' }} observed
+          </p>
         </div>
       </header>
 
@@ -182,16 +188,16 @@ const assumptionRows = computed(() => {
 
       <section class="tiles">
         <div class="tile tile--primary">
-          <p class="tile__value">{{ headline.visitsAvoided }}</p>
-          <p class="tile__label">visits avoided this month</p>
+          <p class="tile__value">{{ headline.tripsAvoided }}</p>
+          <p class="tile__label">site trips avoided this month</p>
         </div>
         <div class="tile tile--primary">
           <p class="tile__value">{{ formatRinggit(headline.savingRm) }}</p>
           <p class="tile__label">estimated saving</p>
         </div>
         <div class="tile">
-          <p class="tile__value tile__value--small">{{ summary.dispatch_count }}</p>
-          <p class="tile__label">visits recommended</p>
+          <p class="tile__value tile__value--small">{{ summary.trips_recommended }}</p>
+          <p class="tile__label">site trips recommended</p>
         </div>
         <div class="tile">
           <p class="tile__value tile__value--small">{{ formatRinggit(headline.atRiskRm) }}</p>
@@ -203,20 +209,24 @@ const assumptionRows = computed(() => {
         <div class="tile">
           <p class="tile__value tile__value--small">{{ roi.faults_confirmed }}</p>
           <p class="tile__label">faults confirmed</p>
+          <p v-if="roi.faults_confirmed_basis" class="tile__basis">
+            {{ roi.faults_confirmed_basis }}
+          </p>
         </div>
         <div class="tile">
           <p class="tile__value tile__value--small">
             {{ Math.round(headline.generationRecovered).toLocaleString('en-MY') }}
           </p>
-          <p class="tile__label">kWh generation recovered</p>
+          <p class="tile__label">kWh generation at risk</p>
+          <p v-if="roi.generation_basis" class="tile__basis">{{ roi.generation_basis }}</p>
         </div>
         <div class="tile">
           <p class="tile__value tile__value--small">{{ formatRinggit(headline.protectedRm) }}</p>
-          <p class="tile__label">cumulative RM protected</p>
+          <p class="tile__label">RM at risk this month</p>
         </div>
         <div class="tile">
           <p class="tile__value tile__value--small">{{ headline.co2eTonnes.toFixed(1) }}</p>
-          <p class="tile__label">tCO₂e avoided</p>
+          <p class="tile__label">tCO₂e recoverable</p>
         </div>
       </section>
 
@@ -243,8 +253,23 @@ const assumptionRows = computed(() => {
         </ul>
         <p class="chart__note">
           The value is as much in the {{ summary.visits_avoided }} sites not being visited as the
-          {{ summary.dispatch_count }} that are.
+          {{ summary.dispatch_count }} that are — {{ summary.trips_avoided }} avoided site trips,
+          because co-located sites are reached in one visit.
         </p>
+      </section>
+
+      <!--
+        The annual figure a P&L owner wants, kept honest: setting period_months
+        to 1 removed the fabricated six-month history, so the only way to show a
+        year is to say plainly that it is a projection and from what.
+      -->
+      <section v-if="roi.projection" class="projection">
+        <h2 class="projection__title">If this month repeats</h2>
+        <p class="projection__value">
+          {{ formatRinggit(roi.projection.saving_rm ?? headline.savingRm * roi.projection.factor) }}
+          <span class="projection__horizon">over {{ roi.projection.horizon_months }} months</span>
+        </p>
+        <p class="projection__basis">{{ roi.projection.basis }}</p>
       </section>
 
       <!-- Exposure by site. Concentration is the point: a few sites carry most of it. -->
@@ -299,11 +324,11 @@ const assumptionRows = computed(() => {
         </div>
         <p class="verdict" :class="caseComparison.holdsAtWorst ? 'verdict--holds' : 'verdict--fails'">
           <template v-if="caseComparison.holdsAtWorst">
-            ✓ At the unfavourable end of every range, avoided-visit saving still exceeds exposure.
+            ✓ At the unfavourable end of every range, avoided-trip saving still exceeds exposure.
             The recommendation holds.
           </template>
           <template v-else>
-            ⚠ At the unfavourable end, exposure exceeds the saving from avoided visits. The case
+            ⚠ At the unfavourable end, exposure exceeds the saving from avoided site trips. The case
             does not hold at the worst corner — say so before a judge finds it.
           </template>
         </p>
@@ -458,6 +483,51 @@ const assumptionRows = computed(() => {
 
 .tile--primary .tile__value {
   color: var(--text-primary);
+}
+
+.projection {
+  border: 1px solid var(--sx-border, #e5e7eb);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.projection__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sx-text-muted, #6b7280);
+  margin: 0 0 0.5rem;
+}
+
+.projection__value {
+  font-size: 1.6rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.projection__horizon {
+  font-size: 0.85rem;
+  font-weight: 450;
+  color: var(--sx-text-muted, #6b7280);
+  margin-left: 0.4rem;
+}
+
+.projection__basis {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--sx-text-muted, #6b7280);
+  max-width: 68ch;
+}
+
+.tile__basis {
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--sx-text-muted, #6b7280);
+  max-width: 34ch;
 }
 
 .tile__label {

@@ -94,11 +94,19 @@ def check_required_fields(payload, report):
         "fleet_summary": [
             "site_count", "total_capacity_mwp", "dispatch_count", "monitor_count",
             "healthy_count", "visits_avoided", "estimated_saving_rm", "total_rm_at_risk",
-            "cohort_count",
+            "cohort_count", "trips_avoided", "trips_recommended", "trip_groups",
         ],
         "roi": [
             "data_status", "period_months", "visits_recommended_total", "visits_avoided_total",
             "faults_confirmed", "generation_recovered_kwh", "rm_protected_cumulative",
+        ],
+        # Schema.md section 4: "All numeric fields required". Without this block
+        # the validator printed PASSED on an artifact missing a constant the
+        # pipeline then crashed on — a KeyError at generate time rather than a
+        # named failure at validate time.
+        "assumptions": [
+            "tariff_rm_per_kwh", "cost_per_visit_rm", "dispatch_threshold_rm_per_month",
+            "min_cohort_size", "same_trip_radius_km", "projection_horizon_months",
         ],
     }
 
@@ -386,6 +394,155 @@ def check_score_types(payload, report):
                 site.get("site_id"), score_type, sorted(VALID_SCORE_TYPES)))
 
 
+def check_trip_groups(payload, report):
+    """Rule 18 — trip groups partition the fleet and agree with the saving.
+
+    The saving is trips_avoided x cost_per_visit_rm, so a wrong grouping is a
+    wrong headline number on Screen 4. Three ways it can go wrong silently: a
+    site in two groups, a site in none, or the counts drifting from the groups
+    they are supposed to summarise.
+    """
+    summary = payload.get("fleet_summary", {})
+    groups = summary.get("trip_groups")
+    if not isinstance(groups, list):
+        report.fail(18, "fleet_summary.trip_groups is missing or not a list")
+        return
+
+    site_ids = [site.get("site_id") for site in payload.get("sites", [])]
+
+    # Check the type before iterating. `group.get("site_ids", [])` returns None
+    # when the key is present and null, so the default never fires and the
+    # comprehension below raises TypeError — a crash instead of a named failure.
+    malformed = False
+    for group in groups:
+        if not isinstance(group.get("site_ids"), list):
+            report.fail(18, "trip group {} has site_ids {!r}, expected a list".format(
+                group.get("trip_id"), group.get("site_ids")))
+            malformed = True
+    if malformed:
+        return
+
+    grouped = [site_id for group in groups for site_id in group["site_ids"]]
+
+    duplicates = {site_id for site_id in grouped if grouped.count(site_id) > 1}
+    if duplicates:
+        report.fail(18, "sites appear in more than one trip group: {}".format(sorted(duplicates)))
+
+    missing = set(site_ids) - set(grouped)
+    if missing:
+        report.fail(18, "sites missing from every trip group: {}".format(sorted(missing)))
+
+    # The other direction. A group naming a site that does not exist inflates
+    # nothing on its own, but it means the grouping was not derived from this
+    # fleet — so no conclusion drawn from it can be trusted.
+    unknown = set(grouped) - set(site_ids)
+    if unknown:
+        report.fail(18, "trip groups name sites that do not exist: {}".format(sorted(unknown)))
+
+    for group in groups:
+        declared = group.get("site_count")
+        actual = len(group.get("site_ids", []))
+        if declared != actual:
+            report.fail(18, "trip group {} says site_count {} but lists {}".format(
+                group.get("trip_id"), declared, actual))
+        # An empty group still counts toward trips_avoided, so it is free money.
+        if actual == 0:
+            report.fail(18, "trip group {} has no members".format(group.get("trip_id")))
+
+    recommended = sum(1 for group in groups if group.get("dispatched"))
+    avoided = len(groups) - recommended
+    if summary.get("trips_recommended") != recommended:
+        report.fail(18, "trips_recommended is {} but {} groups carry a dispatch".format(
+            summary.get("trips_recommended"), recommended))
+    if summary.get("trips_avoided") != avoided:
+        report.fail(18, "trips_avoided is {} but {} groups carry no dispatch".format(
+            summary.get("trips_avoided"), avoided))
+
+    # A group holding a dispatched site is NOT avoided: the technician is already
+    # going to that address. Getting this backwards doubles the headline saving.
+    dispatched_ids = {
+        site.get("site_id") for site in payload.get("sites", [])
+        if site.get("status") == "dispatch"
+    }
+    for group in groups:
+        holds_dispatch = bool(set(group.get("site_ids", [])) & dispatched_ids)
+        if holds_dispatch != bool(group.get("dispatched")):
+            report.fail(18, "trip group {} dispatched={} contradicts its members".format(
+                group.get("trip_id"), group.get("dispatched")))
+
+    # And finally the number this whole rule exists to protect. Everything above
+    # checks the grouping; without this, a correct grouping can still sit beside
+    # an arbitrary saving and pass. Screen 1 and Screen 4 both render it.
+    cost_per_visit = payload.get("assumptions", {}).get("cost_per_visit_rm")
+    declared_saving = summary.get("estimated_saving_rm")
+    if isinstance(cost_per_visit, (int, float)) and isinstance(declared_saving, (int, float)):
+        expected = avoided * cost_per_visit
+        if abs(declared_saving - expected) > 0.01:
+            report.fail(18, "estimated_saving_rm is {} but trips_avoided {} x cost_per_visit_rm {} "
+                            "is {}".format(declared_saving, avoided, cost_per_visit, expected))
+
+
+def check_roi_is_not_multiplied(payload, report):
+    """Rule 19 — no roi figure is a silent multiple of a single observed month.
+
+    This rule exists because a previous version of the pipeline multiplied one
+    month by six and presented it as rolling history. A projection is legitimate;
+    a projection hidden inside a field named `_total` is not. So anything beyond
+    the observed period has to live in `projection`, where it is visible.
+    """
+    roi = payload.get("roi", {})
+    summary = payload.get("fleet_summary", {})
+
+    period = roi.get("period_months")
+    if not isinstance(period, int) or period < 1:
+        report.fail(19, "roi.period_months must be a positive integer, got {!r}".format(period))
+        return
+
+    # The internal-consistency check below is necessary but NOT sufficient: set
+    # period_months to 6 and scale every _total by 6 and it passes, which is
+    # exactly the bug this rule was written to prevent.
+    #
+    # What actually settles it is that the artifact cannot describe a multi-month
+    # window. `meta` carries a single `reporting_month` and no start/end, so any
+    # period above 1 is unsupported by the rest of the payload — the figures
+    # would claim a span nothing else in the file can corroborate.
+    #
+    # RELAX THIS when the schema grows an explicit reporting window (start and
+    # end), and check period_months against that window instead of against 1.
+    if period != 1:
+        report.fail(19, "roi.period_months is {} but meta carries a single reporting_month with "
+                        "no start/end window, so no period other than 1 is supported. Multi-month "
+                        "figures belong in roi.projection".format(period))
+
+    # Never arithmetic on a value that may be absent: a validator that raises
+    # tells the reader nothing, and rule 1 already reports the missing field.
+    pairs = [
+        ("visits_avoided_total", "trips_avoided"),
+        ("visits_recommended_total", "trips_recommended"),
+    ]
+    for roi_key, summary_key in pairs:
+        observed = summary.get(summary_key)
+        total = roi.get(roi_key)
+        if not isinstance(observed, int) or not isinstance(total, int):
+            continue
+        if total != observed * period:
+            report.fail(19, "roi.{} is {} but {} x period_months is {}".format(
+                roi_key, total, summary_key, observed * period))
+
+    projection = roi.get("projection")
+    if projection is not None:
+        for key in ("horizon_months", "factor", "basis"):
+            if key not in projection:
+                report.fail(19, "roi.projection is missing {!r}".format(key))
+
+    # faults_confirmed must never be derived from dispatch_count — it was once
+    # dispatch_count * 2, which was invented. Nothing confirms a fault today.
+    confirmed = roi.get("faults_confirmed")
+    if confirmed and not roi.get("faults_confirmed_basis"):
+        report.fail(19, "roi.faults_confirmed is {} with no faults_confirmed_basis "
+                        "explaining what confirmed them".format(confirmed))
+
+
 ALL_CHECKS = [
     check_top_level_keys,
     check_schema_version,
@@ -404,6 +561,8 @@ ALL_CHECKS = [
     check_data_status_values,
     check_confidence_range,
     check_score_types,
+    check_trip_groups,
+    check_roi_is_not_multiplied,
 ]
 
 

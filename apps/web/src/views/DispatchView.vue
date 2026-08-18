@@ -197,11 +197,19 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
           <footer class="outcome">
             <div class="outcome__tile">
               <p class="outcome__value">{{ summary.visits_avoided }}</p>
-              <p class="outcome__label">visits avoided this month</p>
+              <p class="outcome__label">sites not visited this month</p>
             </div>
             <div class="outcome__tile">
               <p class="outcome__value">{{ formatRinggit(summary.estimated_saving_rm) }}</p>
-              <p class="outcome__label">estimated saving</p>
+              <!--
+                Sites and ringgit have different denominators: co-located sites
+                are one mobilisation, so the saving is per TRIP. Showing the
+                site count beside the money without this line implies a
+                per-site cost that was never charged.
+              -->
+              <p class="outcome__label">
+                estimated saving — {{ summary.trips_avoided }} site trips avoided
+              </p>
             </div>
             <div class="outcome__tile outcome__tile--secondary">
               <p class="outcome__value outcome__value--small">

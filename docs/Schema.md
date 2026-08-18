@@ -1,6 +1,6 @@
 # SolaraX — `dispatch.json` Schema
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Status:** FROZEN as of 15 Aug 2026
 **Owner:** D (Full-Stack)
 **Consumers:** `frontend/src/api.js` (all four screens)
@@ -164,6 +164,8 @@ recomputes or overrides it.**
   "baseline_visit_frequency_per_year": 12,
   "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
   "malaysia_reference_yield_kwh_per_kwp_day_range": { "low": 3.523, "high": 3.901 },
+  "same_trip_radius_km": 2.0,
+  "projection_horizon_months": 12,
   "tier": "Tier 2 — labelled assumption, see PRD §6",
   "notes": {
     "tariff_rm_per_kwh": "Derived from PRD §4 Screen 1 worked figures.",
@@ -173,7 +175,7 @@ recomputes or overrides it.**
 }
 ```
 
-All numeric fields required. `notes` optional but strongly encouraged — it is
+All numeric fields required — **validator rule 1 now enforces this** for `tariff_rm_per_kwh`, `cost_per_visit_rm`, `dispatch_threshold_rm_per_month`, `min_cohort_size`, `same_trip_radius_km` and `projection_horizon_months`. Before that check existed the validator printed PASSED on an artifact `generate_dispatch.py` then crashed on. `notes` optional but strongly encouraged — it is
 literally the answer to "where did that number come from," which PRD §13 item 4
 says will be asked.
 
@@ -220,7 +222,13 @@ Drives Screen 1's header and its footer line.
   "monitor_count": 2,
   "healthy_count": 5,
   "visits_avoided": 7,
-  "estimated_saving_rm": 5950,
+  "trips_avoided": 4,
+  "trips_recommended": 2,
+  "trip_groups": [
+    { "trip_id": "T-01", "label": "Las Vegas, NV",
+      "site_ids": ["S-0034", "S-0035"], "site_count": 2, "dispatched": true }
+  ],
+  "estimated_saving_rm": 6000,
   "total_rm_at_risk": 8170,
   "cohort_count": 2
 }
@@ -231,40 +239,103 @@ Drives Screen 1's header and its footer line.
 | `site_count` | int | ✅ | `len(sites)` |
 | `total_capacity_mwp` | float | ✅ | Σ `capacity_kwp` ÷ 1000, 2 dp |
 | `dispatch_count` / `monitor_count` / `healthy_count` | int | ✅ | Must sum to `site_count` — validator asserts this |
-| `visits_avoided` | int | ✅ | `site_count − dispatch_count` |
-| `estimated_saving_rm` | float | ✅ | `visits_avoided × cost_per_visit_rm` |
+| `visits_avoided` | int | ✅ | `site_count − dispatch_count`. Counts **sites** |
+| `trips_avoided` | int | ✅ | Trip groups containing **no** dispatched site |
+| `trips_recommended` | int | ✅ | Trip groups containing at least one |
+| `trip_groups` | array | ✅ | See below. Must partition `sites` exactly |
+| `estimated_saving_rm` | float | ✅ | **`trips_avoided × cost_per_visit_rm`** |
 | `total_rm_at_risk` | float | ✅ | Σ `rm_at_risk_monthly` across dispatch + monitor |
 | `cohort_count` | int | ✅ | `len(cohorts)` |
 
+### `trip_groups` — 1.5.0
+
+| Field | Type | Meaning |
+|---|---|---|
+| `trip_id` | string | `T-01`, stable within a run |
+| `label` | string | Address of the first member, for display |
+| `site_ids` | string[] | Members. Every site appears in exactly one group |
+| `site_count` | int | `len(site_ids)` — validator asserts agreement |
+| `dispatched` | bool | True when any member is being dispatched |
+
+**Why the money is per trip, not per site.** Sites within
+`assumptions.same_trip_radius_km` are reached in one mobilisation, so they cost
+one visit between them. Five Agassi buildings share byte-identical coordinates;
+counting a saved visit each overstated the fleet saving by more than half.
+
+**A group holding a dispatched site is not avoided.** The technician is already
+going to that address, so skipping its neighbours saves the drive, not the visit.
+Validator rule 18 enforces this — inverting it inflates the headline number.
+
 > `visits_avoided` and `estimated_saving_rm` carry the product's core claim
 > (PRD §4: *"the value is as much in the 37 sites you don't visit"*). Give them
-> visual weight on Screen 1 — they are not a footnote.
+> visual weight on Screen 1 — they are not a footnote. Say **sites** when
+> counting sites and **trips** when counting money; they are different numbers.
 
 ---
 
 ## 6. `roi`
 
-Screen 4. Rolling cumulative figures. For the MVP these may be `SIMULATED`.
+Screen 4. Figures for the **observed** period.
 
 ```json
 "roi": {
-  "data_status": "SIMULATED",
-  "period_months": 6,
-  "visits_recommended_total": 19,
-  "visits_avoided_total": 41,
-  "faults_confirmed": 12,
-  "generation_recovered_kwh": 84200,
-  "rm_protected_cumulative": 33680,
-  "co2e_avoided_tonnes": 51.4,
-  "co2e_grid_factor_kg_per_kwh": 0.61,
-  "co2e_factor_source": "Malaysia grid emission factor — cite Energy Commission / MGTC figure"
+  "data_status": "PLACEHOLDER",
+  "period_months": 1,
+  "visits_recommended_total": 2,
+  "visits_avoided_total": 4,
+  "faults_confirmed": 0,
+  "faults_confirmed_basis": "No confirmation mechanism exists — Screen 3 findings live in browser localStorage",
+  "generation_recovered_kwh": 7772.8,
+  "generation_basis": "Generation AT RISK this month, not recovered. Nothing has been visited or repaired.",
+  "rm_protected_cumulative": 3807.89,
+  "co2e_avoided_tonnes": 5.75,
+  "co2e_grid_factor_kg_per_kwh": 0.74,
+  "co2e_factor_source": "Malaysia grid emission factor, Energy Commission 2024",
+  "projection": {
+    "horizon_months": 12,
+    "factor": 12.0,
+    "saving_rm": 72000,
+    "basis": "Straight-line projection of a single observed month. Assumes this month is representative."
+  }
 }
 ```
 
-All fields required except the two `co2e_*` provenance fields, which are required
-if `co2e_avoided_tonnes` is present. ESG is 15% of the rubric (PRD §10) and B is
-building these numbers — a stated factor with a source is the difference between
-a scored point and a hand-wave.
+`period_months` **must be 1** while `meta` carries a single `reporting_month`
+with no start/end window — nothing above 1 is corroborated by the rest of the
+payload, and internal consistency alone does not settle it: scale every `_total`
+by six and the arithmetic still agrees. Relax this only when the schema grows an
+explicit reporting window, and check against that window instead.
+
+All fields required except `projection`, the two `*_basis` fields and the two
+`co2e_*` provenance fields — the last are required if `co2e_avoided_tonnes` is
+present. ESG is 15% of the rubric (PRD §10); a stated factor with a source is the
+difference between a scored point and a hand-wave.
+
+### No hidden multiplication — 1.5.0
+
+`period_months` is what the pipeline **observed**, not a window it would like to
+claim. Every `_total` must equal its per-period value × `period_months`, and
+validator rule 19 asserts it.
+
+This rule exists because a previous version multiplied one month by six and
+presented the result as rolling history, with `faults_confirmed = dispatch_count
+× 2` invented outright. A projection is legitimate; a projection hidden inside a
+field named `_total` is not. Anything beyond the observed period goes in
+`projection`, where its horizon, factor and assumption are visible.
+
+### Fields that mean less than their names suggest
+
+Two names are fixed by this contract and cannot be renamed without a major bump,
+so they carry a `_basis` sibling saying what they actually hold:
+
+| Field | Reality | Basis field |
+|---|---|---|
+| `generation_recovered_kwh` | Generation **at risk** — nothing has been recovered | `generation_basis` |
+| `faults_confirmed` | 0 until findings are persisted. Screen 3 writes to browser `localStorage` with no backend, so nothing can be counted as confirmed | `faults_confirmed_basis` |
+
+A non-zero `faults_confirmed` without a basis is a rule 19 failure. **The UI must
+render the basis, or use wording consistent with it** — a `_basis` field the
+frontend ignores changes nothing a judge sees.
 
 ---
 
@@ -608,6 +679,7 @@ stops scaffolding shipping to a judge.
 | 1.2.0 | 17 Aug 2026 | Added `sites[].sub_site` — per-inverter comparison against sibling median, with optional per-unit `thermal`. Deviates from BUILD_PLAN §8's draft by using `mean_kwh_daily` + `deviation_pct` instead of `performance_index`: PVDAQ publishes no per-inverter capacity, so a kWh/kWp figure at that level would be fabricated. Additive only (D) |
 | 1.3.0 | 17 Aug 2026 | Added `sites[].excluded_from_analysis` and cohort `analysed_site_ids` / `analysed_count` / `excluded_site_ids`. A site whose telemetry falls below `assumptions.min_plausible_performance_index` is forced `healthy`, never ranked, and never drawn as a peer. `meets_minimum` is now judged on `analysed_count`, not raw membership. Additive only (D) |
 | 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
+| 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Additive only; no field renamed or removed (C) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.
