@@ -49,7 +49,7 @@ FRONTEND_PUBLIC_DIR = os.path.join(REPOSITORY_ROOT, "apps", "web", "public")
 # These are not commercial constants (those live in config/assumptions.json).
 # They describe the shape of the artifact and the date axis.
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
 PIPELINE_VERSION = "0.4.0-placeholder"
 
 SERIES_DAY_COUNT = 90          # docs/Schema.md section 8.6

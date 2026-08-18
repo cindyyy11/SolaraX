@@ -17,28 +17,41 @@
 
 Five members — **at the competition cap**. Nobody can be added mid-stage.
 
-| Chat name | Also known as | GitHub | Notes |
-|---|---|---|---|
-| **Cindy** | ~ ~ Cindy | `cindyyy11` | Owns the repo and the MAIC account; ran registration, chases the group, made the initial commit |
-| **WenHui** | ~ x r | *not given in chat* ⚠️ | Recruited the whole team; earlier self-described as frontend/presentation |
-| **MK** | — | `mkuangdotcom` | UTM. Earlier self-described as backend + AI/ML; brought Chang Zhe and Zhuo Heng in |
-| **Chang Zhe** | "Goh" | `goh1217` | UTM. Built the tech-stack and system-architecture slides; raised the repair-cost challenge |
-| **Zhuo Heng** | — | `ZhuohengChew` | UTM. Authored **PRD v2**; answered the buyer question |
+| Chat name | Also known as | GitHub | Role (confirmed 18 Aug) | PRD §11 letter |
+|---|---|---|---|---|
+| **Cindy** | ~ ~ Cindy | `cindyyy11` | **AI/ML** — M2 Baseline, M3 Peer Benchmarking ⭐ | **A** |
+| **Xin Rou** | ~ x r | *not given in chat* ⚠️ | **Computer Vision** — M5 Drone & Visual Verification | **B** |
+| **MK** | — | `mkuangdotcom` | **Data** — M1 Fleet Ingestion, M4 Economic Ranking | **C** |
+| **Chang Zhe** | "Goh" | `goh1217` | **Full-Stack** — M6 Dashboard, M7 API | **D** |
+| **Zhuo Heng** | — | `ZhuohengChew` | **Product / Business / Pitch** — M8, claim discipline, submission | **E** |
+
+Other notes: Cindy owns the repo and the MAIC account, ran registration and made the initial commit.
+Xin Rou recruited the whole team. MK brought Chang Zhe and Zhuo Heng in. Chang Zhe built the
+tech-stack and system-architecture slides and raised the repair-cost challenge. Zhuo Heng authored
+PRD v2 and answered the buyer question. All three of the last are UTM.
+
+> ⚠️ The fifth member was recorded as **"WenHui"** until 18 Aug on the basis of the chat handle
+> `~ x r`. MK gave the name as **Xin Rou**, which matches the handle's initials. Confirm the
+> spelling before it goes on a submission form.
 
 **Former members** (all left *before* the 8 Aug registration, so the registered roster is clean —
 no mid-stage change problem): **Fang** (~ Mimosa) — withdrew 5 Aug, family medical emergency;
 **Qian Wen** (UKM) — removed 1 Aug; **MY.Chai** — joined 1 Aug, withdrew 5 Aug, believed the
 timeline was not achievable.
 
-### Role assignment — ⚠️ unresolved
+### Role assignment — ✅ resolved 18 Aug
 
 A roles poll ran on **10 Aug** with five options — AI/ML · Data · Full-Stack · Product ·
-Computer Vision/AI — and each got exactly one vote. **The chat never records who took which
-role.** PRD v2 §11 therefore uses anonymous placeholders A–E.
+Computer Vision/AI — and each got exactly one vote, but the chat never recorded the outcome. PRD v2
+§11 therefore used anonymous placeholders A–E, and `HANDOFF.md` inherited them.
 
-Indicative only, from earlier self-descriptions and observed work — **confirm before relying on
-this**: MK → AI/ML or Data; Chang Zhe → architecture/infra; Zhuo Heng → Product; Cindy →
-coordination/frontend; WenHui → frontend/presentation.
+**MK supplied the result on 18 Aug** and it maps one-to-one onto those letters — see the roster
+above. Two of the earlier indicative guesses were wrong and should not be reused: MK is **Data (C)**,
+not AI/ML, and **Cindy is AI/ML (A)**, not coordination/frontend.
+
+The consequence worth naming: **A owns M2 and M3**, and M3 is the differentiator carrying the 25%
+Technical Feasibility row. That is Cindy, who also owns the repo and cleared blocker #1 — the
+heaviest load on the team sits on one person. Track it.
 
 ---
 
@@ -228,9 +241,9 @@ approved and nothing in the repo records what they contain.
 | # | Question | Raised by | Status |
 |---|---|---|---|
 | 1 | Can the submitted deck and summary be re-uploaded before 31 Aug? | — (not yet raised in chat) | 🔴 Blocking — see §3 |
-| 2 | Who holds which of the five roles? | Poll, 10 Aug | ⚠️ Unresolved |
+| 2 | Who holds which of the five roles? | Poll, 10 Aug | ✅ Resolved 18 Aug — see §1 |
 | 3 | Repair-cost-aware ranking | Chang Zhe, 12 Aug | ⏸️ Deferred by agreement |
 | 4 | How to diagnose which component failed | Zhuo Heng, 13 Aug | ⏸️ Open, prerequisite for #3 |
 | 5 | How to price a repair per damaged component | Zhuo Heng, 13 Aug | ⏸️ Open, prerequisite for #3 |
 | 6 | Was the AI usage disclosure submitted? | — | ⚠️ Unverified |
-| 7 | WenHui's GitHub username | — | ⚠️ Missing |
+| 7 | Xin Rou's GitHub username | — | ⚠️ Missing |
