@@ -1,6 +1,6 @@
 {
   "_comment": "Every commercial constant lives here. No magic numbers in code, ever. This whole block is copied verbatim into dispatch.json.assumptions so Screen 4 needs no second fetch — see docs/Schema.md section 4.",
-  "tariff_rm_per_kwh": 0.4899,
+  "tariff_rm_per_kwh": 0.4373,
   "assumed_yield_kwh_per_kwp_day": 3.8,
   "cost_per_visit_rm": 1500,
   "dispatch_threshold_rm_per_month": 1500,
@@ -14,8 +14,8 @@
   "soiling_max_loss_fraction": 0.6,
   "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
   "tariff_rm_per_kwh_range": {
-    "low": 0.4359,
-    "high": 0.5259
+    "low": 0.3649,
+    "high": 0.492
   },
   "malaysia_reference_yield_kwh_per_kwp_day_range": {
     "low": 3.523,
@@ -28,8 +28,8 @@
   "co2e_grid_factor_kg_per_kwh": 0.74,
   "tier": "Tier 2 — labelled assumption, see PRD v2 section 6",
   "notes": {
-    "tariff_rm_per_kwh": "Malaysian RP4, in force 1 Jul 2025 to 31 Dec 2027. Base total 45.4 sen/kWh plus AFA 3.59 sen/kWh = 48.99 sen = RM 0.4899. Base and AFA are Tier 1 (widely reported). Source: https://www.mytnb.com.my/business/understand-your-bill/pricing-tariff",
-    "tariff_rm_per_kwh_range": "RP4 is a four-component structure plus AFA, not a flat rate. The component split is a secondary source, so the rate ships as a range: 40.0 to 49.0 sen base plus AFA. The dispatch conclusion must hold at the low end — see PRD v2 section 13 item 5.",
+    "tariff_rm_per_kwh": "Malaysian RP4, in force 1 Jul 2025 to 31 Dec 2027. Base tariff 45.40 sen/kWh is TIER 1 - set by Suruhanjaya Tenaga (the regulator), revised down from the 45.62 sen approved in Dec 2024. Source: https://www.st.gov.my/jadual-elektrik-baharu-lebih-236-juta-pengguna-domestik-semenanjung-nikmati-kadar-lebih-adil The second half is the Automatic Fuel Adjustment, and it is NOT a component of the tariff: ST sets it MONTHLY, it is signed, and it has been negative in 9 of the 14 months since RP4 began (range -8.91 to +3.80 sen/kWh). This figure uses the 14-month mean of -1.67, so 45.40 - 1.67 = 43.73 sen = RM 0.4373. The mean is the right basis because the product is a recurring monthly service, not a single billing month. Full series in docs/RESEARCH.md section 4.",
+    "tariff_rm_per_kwh_range": "Base 45.40 sen across the full OBSERVED AFA swing: -8.91 sen (Nov 2025, the lowest on record) to +3.80 sen (Aug 2026, the highest). Every endpoint is a rate ST actually published, so this range is evidence rather than a guess. Screen 4's pessimistic toggle takes the low end, where each recovered kWh is worth least - the dispatch conclusion has to survive there. Replaces an earlier guessed band of 0.4359 to 0.5259, whose upper end (52.59 sen) has never occurred under RP4.",
     "cost_per_visit_rm": "Tier 2 assumption. No public figure exists for Malaysian C&I site-visit cost. Mid point of an 800 to 2500 range covering technician time, travel and mobilisation. Costed per TRIP, not per site — see same_trip_radius_km.",
     "same_trip_radius_km": "Tier 2 assumption. Sites within this distance of each other are reached in one mobilisation, so they cost one visit between them, not one each. Five of our sites (the Agassi buildings) share byte-identical coordinates and two more pairs sit within 300 m, so counting saved visits per site overstates the saving by more than half. A trip counts as avoided only when NO site in the group is being dispatched: if a technician is already going to that address, skipping the neighbours saves nothing.",
     "projection_horizon_months": "Horizon for Screen 4's 'if this month repeats' figure. A presentation assumption, not a measurement: the pipeline observes ONE month, so anything annual is a straight-line projection and is labelled as one. Lives here rather than in code because it moves a ringgit figure on screen — CLAUDE.md, no magic numbers.",
