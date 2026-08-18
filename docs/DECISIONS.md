@@ -236,6 +236,50 @@ approved and nothing in the repo records what they contain.
 
 ---
 
+### 19 Aug — 🔒 **HKUST gate closed early; GOLDEN-01 dropped from the fleet**
+
+Two data decisions, both C's (MK).
+
+**The HKUST gate is closed: ship PVDAQ, do not add Hong Kong.** The gate
+(`ARCHITECTURE-PLAN.md` §3.2) said add the 60-station HKUST set only if M1→M4 produced real dispatch
+output by 21 Aug. It has not: M2 and M3 are unbuilt and every economics figure is still placeholder.
+Closed two days early so nobody reopens it on Thursday.
+
+Three things settle it beyond the gate condition failing:
+
+1. **HKUST cannot exercise our differentiator.** All 60 stations sit on one campus — one weather
+   region, one cohort. M3 is *cross-cohort* peer benchmarking; a single cohort tests the mechanism
+   but not the clustering, and clustering is what carries Technical Feasibility (25%).
+2. **The "~100-line adapter" that made this reversible does not exist.** The gate called itself cheap
+   to revisit because a source-adapter interface would make HKUST a small add. `fetch_pvdaq.py` has
+   no adapter layer — it is PVDAQ-specific end to end. Adding HKUST now means a second bespoke
+   fetcher *plus* retrofitting the abstraction, against a 296 MB Dryad archive with Brick `.ttl` +
+   SPARQL metadata rather than S3 parquet.
+3. **The Malaysian answer is cheaper and now exists.** The objection HKUST was meant to answer —
+   *"why is your data American?"* — is addressed by the Malaysian reference cases
+   ([`MALAYSIA-REFERENCE.md`](./MALAYSIA-REFERENCE.md)), built 18 Aug at a fraction of the cost.
+
+Revisit only if M2, M3 and M4 all land early. It is *not yet*, not *never*.
+
+**GOLDEN-01 dropped. The fleet is 11 sites, 1.32 MWp, 2 cohorts.**
+
+Its two NREL Golden systems (1332 Parking Garage, 1283 Research Support Facility II) had **no rows
+in `data/processed/fleet_daily.parquet`** — `BUILD_PLAN.md` recorded "all 12 months" of 2019 from the
+catalogue, which is precisely the catalogue-vs-reality trap that document warns about elsewhere.
+
+They were rendering as **healthy** on Screen 1 while carrying **1.56 of the stated 2.88 MWp — 54% of
+headline capacity with nothing measured behind it.** A site with no data cannot be called healthy,
+and a fleet figure half-composed of unmeasured capacity does not survive one question.
+
+Chang Zhe kept the cohort deliberately, to make PRD §15's minimum-density weakness visible rather
+than hidden. That was a good instinct and the point still stands — it just does not need two empty
+rows to make it, and with no data the cohort demonstrated nothing about density anyway. Dropping it
+also removes the 1,153 kWp parking garage, which strained "distributed C&I rooftop" on its own.
+
+**Consequence:** 13 → 11 sites, 2.88 → 1.32 MWp, 3 → 2 cohorts, and 3 fewer PLACEHOLDER values.
+Every site on screen now has real generation behind it.
+
+
 ## 7. Still open
 
 | # | Question | Raised by | Status |
@@ -247,3 +291,6 @@ approved and nothing in the repo records what they contain.
 | 5 | How to price a repair per damaged component | Zhuo Heng, 13 Aug | ⏸️ Open, prerequisite for #3 |
 | 6 | Was the AI usage disclosure submitted? | — | ⚠️ Unverified |
 | 7 | Xin Rou's GitHub username | — | ⚠️ Missing |
+| 8 | HKUST second dataset | Gate set 16 Aug | ✅ Closed 19 Aug — ship PVDAQ, see above |
+| 9 | GOLDEN-01 / NREL fleet composition | — | ✅ Closed 19 Aug — dropped, no data |
+| 10 | RP4 non-domestic rate by supply voltage | MK, 19 Aug | ⚠️ Open — 45.40 sen is the *average* base tariff; the gazetted MV schedule is not sourced. See [`RESEARCH.md`](./RESEARCH.md) §4.1 |

@@ -63,6 +63,8 @@ grid is mandatory, not optional.
 
 ### 1.4 ✅ Finding 3 — a better fleet exists: greater Las Vegas
 
+> **Superseded, 19 Aug 2026.** What shipped is broader than this section describes: **11 sites across 2 cohorts** — DSUN-01 (5, MD/DE/NJ, `Cfa`) and VEGAS-01 (6, NV, `Bwh`) — not 8 sites in one Las Vegas region. Cross-cohort structure is a gain, not a compromise: it exercises the clustering step and shows the method generalises across weather regions, which a single cohort cannot. A third cohort, GOLDEN-01, was configured and then dropped — it had no time-series data. The analysis below stands as the reasoning that found the fleet; the numbers in it are the 16 Aug plan, not what runs.
+
 The systems that *do* have data are larger and more commercial than the California residential rows.
 Grouping the 157 by location and filtering to QA-pass:
 
@@ -98,7 +100,7 @@ Four further Clark County / Henderson systems (QA-fail) extend the fleet to 12 f
 | `DATASETS.md` §6.2 | "confirm volume — 136 systems may be large" | Resolved: the chosen cohort is **1.22 GB** |
 | `TECHNICAL.md` §2 | "15-min intervals" | **1-minute** for the systems checked; varies by system |
 | `TECHNICAL.md` §2 | implies wide columns | **Long-format EAV**; requires a metrics join and pivot |
-| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds — greater Las Vegas, 8 sites, 37 km |
+| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds, and exceeded — **2 cohorts, 11 sites, 3 Köppen zones** as shipped |
 
 ---
 

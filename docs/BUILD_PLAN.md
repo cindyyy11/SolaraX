@@ -10,10 +10,20 @@ produce information that changes the one after it.
 
 ## Context you need up front
 
+> **Correction, 19 Aug 2026 — GOLDEN-01 dropped, fleet is 11 sites in 2 cohorts.**
+> The two NREL Golden systems (1332, 1283) carry **no rows in
+> `data/processed/fleet_daily.parquet`**, despite the catalogue advertising 2019
+> coverage — the same catalogue-vs-reality trap this document warns about
+> elsewhere. They were rendering as *healthy* on Screen 1 while accounting for
+> **1.56 of the stated 2.88 MWp — 54% of headline capacity with nothing behind
+> it.** Removed from `config/fleet_sites.csv`. Fleet is now **11 sites,
+> 1.32 MWp, 2 cohorts** (DSUN-01 ×5, VEGAS-01 ×6). Reasoning in
+> [`DECISIONS.md`](./DECISIONS.md).
+
 **The fleet has changed.** The earlier shortlist (systems 14596–14698) does not
 exist in the S3 bucket. It has been replaced with verified systems.
 
-Three cohorts, 13 sites. Every system below has been verified to have 2019
+Two cohorts, 11 sites. Every system below has been verified to have 2019
 parquet partitions — catalogue metadata alone is not sufficient evidence (see
 the warning at the end of this section).
 
