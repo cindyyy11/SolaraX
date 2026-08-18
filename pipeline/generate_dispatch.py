@@ -912,9 +912,6 @@ def build_fleet_summary(site_objects, cohorts, assumptions):
     }
 
 
-PROJECTION_HORIZON_MONTHS = 12
-
-
 def build_roi(fleet_summary, assumptions):
     """Screen 4 figures for the observed period.
 
@@ -938,6 +935,7 @@ def build_roi(fleet_summary, assumptions):
     input is not yet.
     """
     period_months = 1
+    horizon = assumptions["projection_horizon_months"]
     tariff = assumptions["tariff_rm_per_kwh"]
     co2e_factor = assumptions["co2e_grid_factor_kg_per_kwh"]
 
@@ -971,15 +969,15 @@ def build_roi(fleet_summary, assumptions):
         "co2e_factor_source": assumptions["notes"]["co2e_grid_factor_kg_per_kwh"],
 
         "projection": {
-            "horizon_months": PROJECTION_HORIZON_MONTHS,
-            "factor": PROJECTION_HORIZON_MONTHS / period_months,
+            "horizon_months": horizon,
+            "factor": horizon / period_months,
             "saving_rm": round(
-                fleet_summary["estimated_saving_rm"] * PROJECTION_HORIZON_MONTHS / period_months, 2),
+                fleet_summary["estimated_saving_rm"] * horizon / period_months, 2),
             "basis": (
                 "Straight-line projection of a single observed month over {} months. Assumes this "
                 "month is representative, which one month of data cannot establish. Shown as a "
                 "projection so it is never mistaken for observed history."
-            ).format(PROJECTION_HORIZON_MONTHS),
+            ).format(horizon),
         },
     }
 

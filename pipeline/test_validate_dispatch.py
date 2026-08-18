@@ -51,6 +51,8 @@ def minimal_valid_payload():
             "cost_per_visit_rm": 1500,
             "dispatch_threshold_rm_per_month": 1500,
             "min_cohort_size": 5,
+            "same_trip_radius_km": 2.0,
+            "projection_horizon_months": 12,
         },
         "fleet_summary": {
             "site_count": 2,
@@ -378,6 +380,21 @@ class TestFileLevelBehaviour(unittest.TestCase):
         self.assertEqual(validate_dispatch.validate(validate_dispatch.DEFAULT_PATH), 0)
 
 
+class TestAssumptionsBlock(unittest.TestCase):
+    """Schema.md section 4 says all numeric fields are required. Without these
+    the validator printed PASSED on an artifact the pipeline then crashed on."""
+
+    def test_missing_trip_radius_is_caught(self):
+        payload = minimal_valid_payload()
+        del payload["assumptions"]["same_trip_radius_km"]
+        self.assertTrue(failures_mentioning(run_checks(payload), "same_trip_radius_km"))
+
+    def test_missing_projection_horizon_is_caught(self):
+        payload = minimal_valid_payload()
+        del payload["assumptions"]["projection_horizon_months"]
+        self.assertTrue(failures_mentioning(run_checks(payload), "projection_horizon_months"))
+
+
 class TestTripGroupRules(unittest.TestCase):
     """Rule 18. The saving is trips_avoided x cost_per_visit, so a wrong grouping
     is a wrong headline number on Screen 4."""
@@ -429,6 +446,14 @@ class TestTripGroupRules(unittest.TestCase):
         payload["fleet_summary"]["trips_avoided"] = 2
         self.assertTrue(failures_mentioning(run_checks(payload), "no members"))
 
+    def test_null_site_ids_is_reported_not_crashed(self):
+        """`group.get("site_ids", [])` returns None when the key exists and is
+        null, so the default never fires and iterating raises. A crash tells the
+        reader nothing."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["site_ids"] = None
+        self.assertTrue(failures_mentioning(run_checks(payload), "expected a list"))
+
     def test_group_holding_a_dispatch_may_not_be_marked_avoided(self):
         """The commercially important one: a technician already going to that
         address means skipping its neighbours saves nothing. Getting this
@@ -461,6 +486,16 @@ class TestRoiNotMultiplied(unittest.TestCase):
         payload = minimal_valid_payload()
         payload["roi"]["projection"] = {"horizon_months": 12, "factor": 12.0}
         self.assertTrue(failures_mentioning(run_checks(payload), "projection"))
+
+    def test_period_months_above_one_is_rejected(self):
+        """The internal-consistency check alone is not enough: scale every _total
+        by six and it passes, which is the original bug. `meta` carries a single
+        reporting_month with no window, so nothing above 1 is supported."""
+        payload = minimal_valid_payload()
+        payload["roi"]["period_months"] = 6
+        payload["roi"]["visits_avoided_total"] = payload["fleet_summary"]["trips_avoided"] * 6
+        payload["roi"]["visits_recommended_total"] = payload["fleet_summary"]["trips_recommended"] * 6
+        self.assertTrue(failures_mentioning(run_checks(payload), "period_months"))
 
     def test_missing_trip_counts_do_not_crash_the_validator(self):
         """A validator that raises tells the reader nothing. Rule 1 reports the

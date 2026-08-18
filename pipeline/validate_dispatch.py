@@ -100,6 +100,14 @@ def check_required_fields(payload, report):
             "data_status", "period_months", "visits_recommended_total", "visits_avoided_total",
             "faults_confirmed", "generation_recovered_kwh", "rm_protected_cumulative",
         ],
+        # Schema.md section 4: "All numeric fields required". Without this block
+        # the validator printed PASSED on an artifact missing a constant the
+        # pipeline then crashed on — a KeyError at generate time rather than a
+        # named failure at validate time.
+        "assumptions": [
+            "tariff_rm_per_kwh", "cost_per_visit_rm", "dispatch_threshold_rm_per_month",
+            "min_cohort_size", "same_trip_radius_km", "projection_horizon_months",
+        ],
     }
 
     for block_name, required_keys in required_by_block.items():
@@ -401,7 +409,20 @@ def check_trip_groups(payload, report):
         return
 
     site_ids = [site.get("site_id") for site in payload.get("sites", [])]
-    grouped = [site_id for group in groups for site_id in group.get("site_ids", [])]
+
+    # Check the type before iterating. `group.get("site_ids", [])` returns None
+    # when the key is present and null, so the default never fires and the
+    # comprehension below raises TypeError — a crash instead of a named failure.
+    malformed = False
+    for group in groups:
+        if not isinstance(group.get("site_ids"), list):
+            report.fail(18, "trip group {} has site_ids {!r}, expected a list".format(
+                group.get("trip_id"), group.get("site_ids")))
+            malformed = True
+    if malformed:
+        return
+
+    grouped = [site_id for group in groups for site_id in group["site_ids"]]
 
     duplicates = {site_id for site_id in grouped if grouped.count(site_id) > 1}
     if duplicates:
@@ -476,6 +497,22 @@ def check_roi_is_not_multiplied(payload, report):
     if not isinstance(period, int) or period < 1:
         report.fail(19, "roi.period_months must be a positive integer, got {!r}".format(period))
         return
+
+    # The internal-consistency check below is necessary but NOT sufficient: set
+    # period_months to 6 and scale every _total by 6 and it passes, which is
+    # exactly the bug this rule was written to prevent.
+    #
+    # What actually settles it is that the artifact cannot describe a multi-month
+    # window. `meta` carries a single `reporting_month` and no start/end, so any
+    # period above 1 is unsupported by the rest of the payload — the figures
+    # would claim a span nothing else in the file can corroborate.
+    #
+    # RELAX THIS when the schema grows an explicit reporting window (start and
+    # end), and check period_months against that window instead of against 1.
+    if period != 1:
+        report.fail(19, "roi.period_months is {} but meta carries a single reporting_month with "
+                        "no start/end window, so no period other than 1 is supported. Multi-month "
+                        "figures belong in roi.projection".format(period))
 
     # Never arithmetic on a value that may be absent: a validator that raises
     # tells the reader nothing, and rule 1 already reports the missing field.

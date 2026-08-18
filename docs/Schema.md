@@ -164,6 +164,8 @@ recomputes or overrides it.**
   "baseline_visit_frequency_per_year": 12,
   "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
   "malaysia_reference_yield_kwh_per_kwp_day_range": { "low": 3.523, "high": 3.901 },
+  "same_trip_radius_km": 2.0,
+  "projection_horizon_months": 12,
   "tier": "Tier 2 — labelled assumption, see PRD §6",
   "notes": {
     "tariff_rm_per_kwh": "Derived from PRD §4 Screen 1 worked figures.",
@@ -173,7 +175,7 @@ recomputes or overrides it.**
 }
 ```
 
-All numeric fields required. `notes` optional but strongly encouraged — it is
+All numeric fields required — **validator rule 1 now enforces this** for `tariff_rm_per_kwh`, `cost_per_visit_rm`, `dispatch_threshold_rm_per_month`, `min_cohort_size`, `same_trip_radius_km` and `projection_horizon_months`. Before that check existed the validator printed PASSED on an artifact `generate_dispatch.py` then crashed on. `notes` optional but strongly encouraged — it is
 literally the answer to "where did that number come from," which PRD §13 item 4
 says will be asked.
 
@@ -297,6 +299,12 @@ Screen 4. Figures for the **observed** period.
   }
 }
 ```
+
+`period_months` **must be 1** while `meta` carries a single `reporting_month`
+with no start/end window — nothing above 1 is corroborated by the rest of the
+payload, and internal consistency alone does not settle it: scale every `_total`
+by six and the arithmetic still agrees. Relax this only when the schema grows an
+explicit reporting window, and check against that window instead.
 
 All fields required except `projection`, the two `*_basis` fields and the two
 `co2e_*` provenance fields — the last are required if `co2e_avoided_tonnes` is
@@ -671,7 +679,7 @@ stops scaffolding shipping to a judge.
 | 1.2.0 | 17 Aug 2026 | Added `sites[].sub_site` — per-inverter comparison against sibling median, with optional per-unit `thermal`. Deviates from BUILD_PLAN §8's draft by using `mean_kwh_daily` + `deviation_pct` instead of `performance_index`: PVDAQ publishes no per-inverter capacity, so a kWh/kWp figure at that level would be fabricated. Additive only (D) |
 | 1.3.0 | 17 Aug 2026 | Added `sites[].excluded_from_analysis` and cohort `analysed_site_ids` / `analysed_count` / `excluded_site_ids`. A site whose telemetry falls below `assumptions.min_plausible_performance_index` is forced `healthy`, never ranked, and never drawn as a peer. `meets_minimum` is now judged on `analysed_count`, not raw membership. Additive only (D) |
 | 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
-| 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, and `assumptions.same_trip_radius_km`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19. Additive only; no field renamed or removed (C) |
+| 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Additive only; no field renamed or removed (C) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.

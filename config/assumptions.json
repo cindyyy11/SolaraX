@@ -1,6 +1,5 @@
 {
   "_comment": "Every commercial constant lives here. No magic numbers in code, ever. This whole block is copied verbatim into dispatch.json.assumptions so Screen 4 needs no second fetch — see docs/Schema.md section 4.",
-
   "tariff_rm_per_kwh": 0.4899,
   "assumed_yield_kwh_per_kwp_day": 3.8,
   "cost_per_visit_rm": 1500,
@@ -10,14 +9,12 @@
   "sub_site_deviation_threshold": -0.15,
   "min_plausible_performance_index": 2.0,
   "same_trip_radius_km": 2.0,
-
+  "projection_horizon_months": 12,
   "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
-
   "tariff_rm_per_kwh_range": {
     "low": 0.4359,
     "high": 0.5259
   },
-
   "malaysia_reference_yield_kwh_per_kwp_day_range": {
     "low": 3.523,
     "high": 3.901
@@ -26,16 +23,14 @@
     "low": 800,
     "high": 2500
   },
-
-  "co2e_grid_factor_kg_per_kwh": 0.740,
-
+  "co2e_grid_factor_kg_per_kwh": 0.74,
   "tier": "Tier 2 — labelled assumption, see PRD v2 section 6",
-
   "notes": {
     "tariff_rm_per_kwh": "Malaysian RP4, in force 1 Jul 2025 to 31 Dec 2027. Base total 45.4 sen/kWh plus AFA 3.59 sen/kWh = 48.99 sen = RM 0.4899. Base and AFA are Tier 1 (widely reported). Source: https://www.mytnb.com.my/business/understand-your-bill/pricing-tariff",
     "tariff_rm_per_kwh_range": "RP4 is a four-component structure plus AFA, not a flat rate. The component split is a secondary source, so the rate ships as a range: 40.0 to 49.0 sen base plus AFA. The dispatch conclusion must hold at the low end — see PRD v2 section 13 item 5.",
     "cost_per_visit_rm": "Tier 2 assumption. No public figure exists for Malaysian C&I site-visit cost. Mid point of an 800 to 2500 range covering technician time, travel and mobilisation. Costed per TRIP, not per site — see same_trip_radius_km.",
     "same_trip_radius_km": "Tier 2 assumption. Sites within this distance of each other are reached in one mobilisation, so they cost one visit between them, not one each. Five of our sites (the Agassi buildings) share byte-identical coordinates and two more pairs sit within 300 m, so counting saved visits per site overstates the saving by more than half. A trip counts as avoided only when NO site in the group is being dispatched: if a technician is already going to that address, skipping the neighbours saves nothing.",
+    "projection_horizon_months": "Horizon for Screen 4's 'if this month repeats' figure. A presentation assumption, not a measurement: the pipeline observes ONE month, so anything annual is a straight-line projection and is labelled as one. Lives here rather than in code because it moves a ringgit figure on screen — CLAUDE.md, no magic numbers.",
     "cost_per_visit_rm_range": "Screen 4's pessimistic toggle recomputes headline figures at the unfavourable end of every range: lowest tariff, highest visit cost.",
     "dispatch_threshold_rm_per_month": "A site is worth visiting when the monthly loss exceeds the cost of going. Set at the high end of the visit-cost range so a dispatch survives the worst corner of every assumption.",
     "min_cohort_size": "Below this, the cohort control group is too weak to be meaningful. PRD v2 section 15. Cohorts under this size are flagged, never hidden.",

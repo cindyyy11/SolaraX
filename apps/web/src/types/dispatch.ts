@@ -36,6 +36,8 @@ export interface Assumptions {
   co2e_grid_factor_kg_per_kwh?: number
   /** Schema 1.5.0. Sites within this distance are one mobilisation. */
   same_trip_radius_km?: number
+  /** Schema 1.5.0. Horizon for Screen 4's "if this month repeats" figure. */
+  projection_horizon_months?: number
   /**
    * Schema 1.4.0. Derived reference estimate — modelled Malaysian specific
    * yield, NOT a measurement. Distinct from `assumed_yield_kwh_per_kwp_day`,
