@@ -425,7 +425,7 @@ def verify():
     """
     import pandas
 
-    for path in (FLEET_INJECTED_PATH, GROUND_TRUTH_PATH):
+    for path in (FLEET_INJECTED_PATH, INVERTER_INJECTED_PATH, GROUND_TRUTH_PATH):
         if not os.path.exists(path):
             print("nothing to verify — run an injection first ({} missing)".format(
                 os.path.relpath(path, REPOSITORY_ROOT)))
