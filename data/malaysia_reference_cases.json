@@ -1,0 +1,113 @@
+{
+  "data_status": "BUILT",
+  "artifact": "Malaysian reference cases \u2014 modelled expected output",
+  "what_this_is": "Expected output for a reference C&I rooftop system at four real Malaysian coordinates, from real satellite weather (PVGIS-ERA5) through PVGIS's physical PV model.",
+  "what_this_is_not": "NOT measured generation. No Malaysian site produced these numbers. No openly reusable per-site Malaysian inverter time series exists (docs/RESEARCH.md section 5). These figures must never be presented as measurements, and must never be used as ground truth for detection accuracy.",
+  "source": "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc",
+  "radiation_period": {
+    "database": "PVGIS-ERA5",
+    "year_min": 2005,
+    "year_max": 2020
+  },
+  "model_parameters_requested": {
+    "peakpower": 100,
+    "mountingplace": "building",
+    "angle": 10,
+    "aspect": 0,
+    "pvtechchoice": "crystSi",
+    "loss": 14,
+    "outputformat": "json"
+  },
+  "summary": {
+    "site_count": 4,
+    "specific_yield_min_kwh_per_kwp_day": 3.523,
+    "specific_yield_max_kwh_per_kwp_day": 3.901,
+    "specific_yield_mean_kwh_per_kwp_day": 3.656
+  },
+  "sites": [
+    {
+      "name": "Bukit Raja, Klang",
+      "state": "Selangor",
+      "latitude": 3.08,
+      "longitude": 101.44,
+      "elevation_m": 10.0,
+      "annual_kwh": 142381.0,
+      "annual_irradiation_kwh_per_m2": 1981.3,
+      "specific_yield_kwh_per_kwp_day": 3.901,
+      "confirmed_by_pvgis": {
+        "mounting_type": "building-integrated",
+        "slope_deg": 10,
+        "azimuth_deg": 0,
+        "technology": "c-Si",
+        "peak_power_kwp": 100.0,
+        "system_loss_pct": 14.0,
+        "radiation_database": "PVGIS-ERA5",
+        "year_min": 2005,
+        "year_max": 2020
+      }
+    },
+    {
+      "name": "Senai",
+      "state": "Johor",
+      "latitude": 1.6018,
+      "longitude": 103.6689,
+      "elevation_m": 39.0,
+      "annual_kwh": 128573.4,
+      "annual_irradiation_kwh_per_m2": 1759.0,
+      "specific_yield_kwh_per_kwp_day": 3.523,
+      "confirmed_by_pvgis": {
+        "mounting_type": "building-integrated",
+        "slope_deg": 10,
+        "azimuth_deg": 0,
+        "technology": "c-Si",
+        "peak_power_kwp": 100.0,
+        "system_loss_pct": 14.0,
+        "radiation_database": "PVGIS-ERA5",
+        "year_min": 2005,
+        "year_max": 2020
+      }
+    },
+    {
+      "name": "Nilai",
+      "state": "Negeri Sembilan",
+      "latitude": 2.8148,
+      "longitude": 101.799,
+      "elevation_m": 35.0,
+      "annual_kwh": 134002.3,
+      "annual_irradiation_kwh_per_m2": 1851.7,
+      "specific_yield_kwh_per_kwp_day": 3.671,
+      "confirmed_by_pvgis": {
+        "mounting_type": "building-integrated",
+        "slope_deg": 10,
+        "azimuth_deg": 0,
+        "technology": "c-Si",
+        "peak_power_kwp": 100.0,
+        "system_loss_pct": 14.0,
+        "radiation_database": "PVGIS-ERA5",
+        "year_min": 2005,
+        "year_max": 2020
+      }
+    },
+    {
+      "name": "Ipoh",
+      "state": "Perak",
+      "latitude": 4.5975,
+      "longitude": 101.0901,
+      "elevation_m": 63.0,
+      "annual_kwh": 128802.6,
+      "annual_irradiation_kwh_per_m2": 1803.3,
+      "specific_yield_kwh_per_kwp_day": 3.529,
+      "confirmed_by_pvgis": {
+        "mounting_type": "building-integrated",
+        "slope_deg": 10,
+        "azimuth_deg": 0,
+        "technology": "c-Si",
+        "peak_power_kwp": 100.0,
+        "system_loss_pct": 14.0,
+        "radiation_database": "PVGIS-ERA5",
+        "year_min": 2005,
+        "year_max": 2020
+      }
+    }
+  ]
+}

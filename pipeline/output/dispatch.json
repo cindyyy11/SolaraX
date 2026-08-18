@@ -1,7 +1,7 @@
 {
   "meta": {
     "schema_version": "1.3.0",
-    "generated_at": "2026-08-17T04:29:51Z",
+    "generated_at": "2026-08-18T14:29:20Z",
     "pipeline_version": "0.4.0-placeholder",
     "reporting_month": "2026-08",
     "reporting_month_label": "August 2026",
@@ -22,9 +22,14 @@
     "baseline_visit_frequency_per_year": 12,
     "sub_site_deviation_threshold": -0.15,
     "min_plausible_performance_index": 2.0,
+    "malaysia_reference_yield_kwh_per_kwp_day": 3.656,
     "tariff_rm_per_kwh_range": {
       "low": 0.4359,
       "high": 0.5259
+    },
+    "malaysia_reference_yield_kwh_per_kwp_day_range": {
+      "low": 3.523,
+      "high": 3.901
     },
     "cost_per_visit_rm_range": {
       "low": 800,
@@ -41,7 +46,9 @@
       "min_cohort_size": "Below this, the cohort control group is too weak to be meaningful. PRD v2 section 15. Cohorts under this size are flagged, never hidden.",
       "sub_site_deviation_threshold": "An inverter is flagged when its mean daily output sits this far below the median of its siblings on the same roof. Siblings share weather perfectly, so divergence is unambiguous. Ratio-based because PVDAQ does not publish per-inverter capacity.",
       "min_plausible_performance_index": "Data-quality floor in kWh/kWp/day. A working C&I site does not average below this anywhere the fleet operates; a site that does has incomplete telemetry, not a fault. Such sites are excluded from detection AND from their cohort median, because a permanently depressed reading both generates a false dispatch and drags the peer baseline down. Exclusion is stated on screen, never silent.",
-      "assumed_yield_kwh_per_kwp_day": "Nominal specific yield used only for sanity checks and demo estimates, never as a substitute for the M2 physics baseline.",
+      "assumed_yield_kwh_per_kwp_day": "Nominal specific yield used only for sanity checks and demo estimates, never as a substitute for the M2 physics baseline. NOT a Malaysian figure and not derived from one — see malaysia_reference_yield_kwh_per_kwp_day, which is a separate constant for a separate purpose. Do not merge them.",
+      "malaysia_reference_yield_kwh_per_kwp_day": "DERIVED REFERENCE ESTIMATE, not a measurement and not Tier 1. Mean modelled specific yield across four real Malaysian coordinates (Bukit Raja/Klang, Senai, Nilai, Ipoh), from PVGIS-ERA5 satellite weather averaged 2005-2020 through PVGIS's physical PV model. Depends entirely on chosen parameters: 100 kWp c-Si, roof-mounted (building-integrated), 10 degree tilt, 0 degree azimuth (south), 14 percent system loss. Change any one and the figure moves — roof-mounting alone costs about 4 percent against free-standing. Regenerate with pipeline/fetch_malaysia_reference.py; method note in docs/MALAYSIA-REFERENCE.md. NO Malaysian site measured this: no openly reusable per-site Malaysian inverter time series exists (docs/RESEARCH.md section 5). Never present it as measured output and never use it as ground truth for detection accuracy.",
+      "malaysia_reference_yield_kwh_per_kwp_day_range": "Spread across the four sites, lowest (Senai) to highest (Bukit Raja/Klang). This range falls entirely inside the observed spread of the real PVDAQ fleet (3.52 to 4.76 kWh/kWp/day, recomputable with pipeline/fleet_median.py), which supports using that fleet to demonstrate the method. It does NOT claim the fleets are operationally equivalent — one side is measured output from specific hardware and operations, the other is modelled reference output.",
       "baseline_visit_frequency_per_year": "Calendar-driven visit cadence the product replaces. Twelve equals monthly.",
       "co2e_grid_factor_kg_per_kwh": "Tier 1. Malaysia grid emission factor, Energy Commission 2024. Recovered generation times this factor gives tCO2e avoided for the ESG rubric row."
     }
