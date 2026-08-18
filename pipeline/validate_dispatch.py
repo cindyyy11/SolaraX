@@ -411,12 +411,22 @@ def check_trip_groups(payload, report):
     if missing:
         report.fail(18, "sites missing from every trip group: {}".format(sorted(missing)))
 
+    # The other direction. A group naming a site that does not exist inflates
+    # nothing on its own, but it means the grouping was not derived from this
+    # fleet — so no conclusion drawn from it can be trusted.
+    unknown = set(grouped) - set(site_ids)
+    if unknown:
+        report.fail(18, "trip groups name sites that do not exist: {}".format(sorted(unknown)))
+
     for group in groups:
         declared = group.get("site_count")
         actual = len(group.get("site_ids", []))
         if declared != actual:
             report.fail(18, "trip group {} says site_count {} but lists {}".format(
                 group.get("trip_id"), declared, actual))
+        # An empty group still counts toward trips_avoided, so it is free money.
+        if actual == 0:
+            report.fail(18, "trip group {} has no members".format(group.get("trip_id")))
 
     recommended = sum(1 for group in groups if group.get("dispatched"))
     avoided = len(groups) - recommended
@@ -438,6 +448,17 @@ def check_trip_groups(payload, report):
         if holds_dispatch != bool(group.get("dispatched")):
             report.fail(18, "trip group {} dispatched={} contradicts its members".format(
                 group.get("trip_id"), group.get("dispatched")))
+
+    # And finally the number this whole rule exists to protect. Everything above
+    # checks the grouping; without this, a correct grouping can still sit beside
+    # an arbitrary saving and pass. Screen 1 and Screen 4 both render it.
+    cost_per_visit = payload.get("assumptions", {}).get("cost_per_visit_rm")
+    declared_saving = summary.get("estimated_saving_rm")
+    if isinstance(cost_per_visit, (int, float)) and isinstance(declared_saving, (int, float)):
+        expected = avoided * cost_per_visit
+        if abs(declared_saving - expected) > 0.01:
+            report.fail(18, "estimated_saving_rm is {} but trips_avoided {} x cost_per_visit_rm {} "
+                            "is {}".format(declared_saving, avoided, cost_per_visit, expected))
 
 
 def check_roi_is_not_multiplied(payload, report):

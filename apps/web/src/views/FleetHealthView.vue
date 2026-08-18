@@ -258,6 +258,20 @@ const assumptionRows = computed(() => {
         </p>
       </section>
 
+      <!--
+        The annual figure a P&L owner wants, kept honest: setting period_months
+        to 1 removed the fabricated six-month history, so the only way to show a
+        year is to say plainly that it is a projection and from what.
+      -->
+      <section v-if="roi.projection" class="projection">
+        <h2 class="projection__title">If this month repeats</h2>
+        <p class="projection__value">
+          {{ formatRinggit(roi.projection.saving_rm ?? headline.savingRm * roi.projection.factor) }}
+          <span class="projection__horizon">over {{ roi.projection.horizon_months }} months</span>
+        </p>
+        <p class="projection__basis">{{ roi.projection.basis }}</p>
+      </section>
+
       <!-- Exposure by site. Concentration is the point: a few sites carry most of it. -->
       <section v-if="riskBySite.length" class="chart">
         <h2 class="chart__title">Money at risk by site</h2>
@@ -469,6 +483,43 @@ const assumptionRows = computed(() => {
 
 .tile--primary .tile__value {
   color: var(--text-primary);
+}
+
+.projection {
+  border: 1px solid var(--sx-border, #e5e7eb);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.projection__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sx-text-muted, #6b7280);
+  margin: 0 0 0.5rem;
+}
+
+.projection__value {
+  font-size: 1.6rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.projection__horizon {
+  font-size: 0.85rem;
+  font-weight: 450;
+  color: var(--sx-text-muted, #6b7280);
+  margin-left: 0.4rem;
+}
+
+.projection__basis {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--sx-text-muted, #6b7280);
+  max-width: 68ch;
 }
 
 .tile__basis {

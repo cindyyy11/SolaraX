@@ -404,6 +404,31 @@ class TestTripGroupRules(unittest.TestCase):
         payload["fleet_summary"]["trips_avoided"] = 7
         self.assertTrue(failures_mentioning(run_checks(payload), "trips_avoided"))
 
+    def test_saving_must_equal_trips_times_cost(self):
+        """The number the whole rule exists to protect. Without this assertion a
+        correct grouping can sit beside an arbitrary saving and pass — which it
+        did, until a reviewer set it to 999999 and validation returned clean."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["estimated_saving_rm"] = 999999
+        self.assertTrue(failures_mentioning(run_checks(payload), "estimated_saving_rm"))
+
+    def test_group_naming_an_unknown_site_is_caught(self):
+        """A group naming a site that does not exist means the grouping was not
+        derived from this fleet, so nothing concluded from it can be trusted."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"][0]["site_ids"].append("S-9999")
+        payload["fleet_summary"]["trip_groups"][0]["site_count"] = 2
+        self.assertTrue(failures_mentioning(run_checks(payload), "do not exist"))
+
+    def test_empty_group_is_caught(self):
+        """An empty group still counts toward trips_avoided — free money."""
+        payload = minimal_valid_payload()
+        payload["fleet_summary"]["trip_groups"].append(
+            {"trip_id": "T-99", "label": "nowhere", "site_ids": [], "site_count": 0,
+             "dispatched": False})
+        payload["fleet_summary"]["trips_avoided"] = 2
+        self.assertTrue(failures_mentioning(run_checks(payload), "no members"))
+
     def test_group_holding_a_dispatch_may_not_be_marked_avoided(self):
         """The commercially important one: a technician already going to that
         address means skipping its neighbours saves nothing. Getting this
