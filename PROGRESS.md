@@ -15,7 +15,7 @@
 | **Phase** | Phase 2 — M1 shipped, M4 economics shipped, M2/M3 not started |
 | **Code written** | Pipeline + 4 dashboard screens run on real data. **23 PLACEHOLDER values remain** |
 | **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
-| **Schema** | 1.5.0, frozen, 19 validator rules · 45 validator tests · 21 injection tests |
+| **Schema** | 1.5.0, frozen, 19 validator rules · 45 validator tests · 26 injection tests |
 | **Public URL** | None yet |
 
 ---
@@ -58,9 +58,9 @@ failed; HKUST cannot exercise cross-cohort clustering anyway. See [`docs/DECISIO
 | 5 | Drone & Visual Verification | ⬜ Not started — `evidence` block not emitted (B) |
 | 6 | Dashboard (Vue 3) | ✅ **Built** — four screens, zero console errors (D) |
 | 7 | API / Supabase | ⬜ Not started (D) |
-| 8 | Testing & Packaging | 🟡 Partial — 66 pipeline tests; no demo video (E) |
+| 8 | Testing & Packaging | 🟡 Partial — 71 pipeline tests; no demo video (E) |
 
-**Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
+**71 pipeline tests.** **Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
 fault-injection harness producing M3's ground truth.
 
 ---

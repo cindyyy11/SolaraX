@@ -141,8 +141,12 @@ It is signed, and it has been **negative in 9 of the 14 months** of RP4 so far.
 
 **Range −8.91 to +3.80 sen/kWh. Mean −1.67.** All sen/kWh.
 
-The AFA is capped at ±3 sen/kWh without cabinet approval, which is why Nov 2025's −8.91 required
-one. Green Energy Tariff subscribers are exempt from it entirely — a real route for a C&I owner to
+Reported cap: ±3 sen/kWh without cabinet approval. **Treat that as unverified.** Six of the
+fourteen months sit outside ±3 — Oct −6.50, Nov −8.91, Dec −6.42, Jan −4.99, Jul +3.59, Aug +3.80 —
+so either the cap is routinely exceeded with approval, or it is stated loosely in secondary
+coverage. No primary source for it was found. The *rates* above are each individually reported and
+are what the tariff is built on; the cap is context, not an input, and should not be repeated as
+fact until sourced. Green Energy Tariff subscribers are exempt from it entirely — a real route for a C&I owner to
 remove this variable, and worth a line in the pitch.
 
 **What this corrects.** An earlier `assumptions.json` used *45.40 + 3.59 = 48.99 sen* as a flat rate.

@@ -103,6 +103,38 @@ class TestEventConstruction(unittest.TestCase):
             magnitude=None, assumptions=ASSUMPTIONS, unit_count=7)
         self.assertNotIn("affected_capacity_kwp", event)
 
+    def test_soiling_rate_scales_with_ladder_position(self):
+        """It previously discarded severity_scale, so every soiling event was
+        identical regardless of ladder position — a third of the ladder was
+        decorative. A slower ramp is a harder detection, which is the point."""
+        assumptions = fault_injection.load_assumptions()
+        base = assumptions["soiling_rate_per_day"]
+        severe = fault_injection.build_event(
+            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, severity_scale=1.0)
+        mild = fault_injection.build_event(
+            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, severity_scale=0.25)
+        self.assertAlmostEqual(severe["rate_per_day"], base, places=6)
+        self.assertLess(mild["rate_per_day"], severe["rate_per_day"])
+        # A milder ramp must actually be harder to see at a fixed horizon.
+        self.assertGreater(fault_injection.factor_for_day(mild, 60),
+                           fault_injection.factor_for_day(severe, 60))
+
+    def test_string_loss_varies_by_site_rather_than_being_faked(self):
+        """1/N is fixed by hardware, so it cannot be laddered without inventing
+        a partial unit dropout — which would undo the site-level semantics.
+        Honest variation across sites beats a fabricated one."""
+        assumptions = fault_injection.load_assumptions()
+        seven = fault_injection.build_event(
+            site_id="S-1199", fault_type="string_loss", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, unit_count=7)
+        two = fault_injection.build_event(
+            site_id="S-1203", fault_type="string_loss", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, unit_count=2)
+        self.assertAlmostEqual(seven["magnitude_pct"], 1 / 7, places=5)
+        self.assertAlmostEqual(two["magnitude_pct"], 0.5, places=5)
+
     def test_every_event_is_labelled_synthetic(self):
         self.assertIn("SYNTHETIC", step_event()["note"])
 
@@ -236,39 +268,8 @@ class TestAgainstRealData(unittest.TestCase):
         events = fault_injection.choose_events(frames, fault_injection.load_assumptions(),
                                                seed=42, count=4)
         starts = {event["injected_from"] for event in events}
-        self.assertGreater(len(starts), 1, "all faults start on the same date")
-
-    def test_soiling_rate_scales_with_ladder_position(self):
-        """It previously discarded severity_scale, so every soiling event was
-        identical regardless of ladder position — a third of the ladder was
-        decorative. A slower ramp is a harder detection, which is the point."""
-        assumptions = fault_injection.load_assumptions()
-        base = assumptions["soiling_rate_per_day"]
-        severe = fault_injection.build_event(
-            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
-            magnitude=None, assumptions=assumptions, severity_scale=1.0)
-        mild = fault_injection.build_event(
-            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
-            magnitude=None, assumptions=assumptions, severity_scale=0.25)
-        self.assertAlmostEqual(severe["rate_per_day"], base, places=6)
-        self.assertLess(mild["rate_per_day"], severe["rate_per_day"])
-        # A milder ramp must actually be harder to see at a fixed horizon.
-        self.assertGreater(fault_injection.factor_for_day(mild, 60),
-                           fault_injection.factor_for_day(severe, 60))
-
-    def test_string_loss_varies_by_site_rather_than_being_faked(self):
-        """1/N is fixed by hardware, so it cannot be laddered without inventing
-        a partial unit dropout — which would undo the site-level semantics.
-        Honest variation across sites beats a fabricated one."""
-        assumptions = fault_injection.load_assumptions()
-        seven = fault_injection.build_event(
-            site_id="S-1199", fault_type="string_loss", injected_from="2019-03-01",
-            magnitude=None, assumptions=assumptions, unit_count=7)
-        two = fault_injection.build_event(
-            site_id="S-1203", fault_type="string_loss", injected_from="2019-03-01",
-            magnitude=None, assumptions=assumptions, unit_count=2)
-        self.assertAlmostEqual(seven["magnitude_pct"], 1 / 7, places=5)
-        self.assertAlmostEqual(two["magnitude_pct"], 0.5, places=5)
+        self.assertEqual(len(starts), len(events),
+                         "faults share a start date: {}".format(sorted(starts)))
 
     def test_ladder_never_targets_an_already_excluded_site(self):
         """S-1367 sits below the plausibility floor, so it is not in the
@@ -280,13 +281,49 @@ class TestAgainstRealData(unittest.TestCase):
 
     def test_ladder_descends_in_severity(self):
         """A flat ladder has no failure region, which is the whole defence
-        against 'you found faults you invented'."""
+        against 'you found faults you invented'.
+
+        This previously filtered to `step_drop` only — the one type that always
+        consumed its rung — so it passed while certifying a descent that did not
+        exist. It now checks every event that consumes a rung, across seeds.
+
+        `string_loss` is exempt and that is deliberate: it is 1/N, fixed by
+        hardware, and faking a partial unit dropout to make it fit the ladder
+        would undo its site-level semantics. It varies across sites instead.
+        """
         frames = self.frames()
-        events = fault_injection.choose_events(frames, fault_injection.load_assumptions(),
-                                               seed=42, count=4)
-        steps = [event["magnitude_pct"] for event in events
-                 if event["fault_type"] == "step_drop" and event["magnitude_pct"]]
-        self.assertEqual(steps, sorted(steps, reverse=True))
+        assumptions = fault_injection.load_assumptions()
+        for seed in (42, 7, 1, 3):
+            events = fault_injection.choose_events(frames, assumptions, seed=seed, count=4)
+            rungs = [e["severity_scale"] for e in events
+                     if e["fault_type"] != "string_loss" and "severity_scale" in e]
+            self.assertEqual(rungs, sorted(rungs, reverse=True),
+                             "seed {} rungs not descending: {}".format(seed, rungs))
+
+    def test_soiling_rate_is_not_pinned_across_seeds(self):
+        """The regression that made the previous fix inert. fault_type came from
+        `index % 3` and the rung from `ladder[index % 6]`, so soiling only ever
+        landed at index 1 and drew rung 0.25 — identical rate at every seed."""
+        frames = self.frames()
+        assumptions = fault_injection.load_assumptions()
+        rates = set()
+        for seed in range(1, 9):
+            for event in fault_injection.choose_events(frames, assumptions, seed=seed, count=4):
+                if event["fault_type"] == "soiling_ramp":
+                    rates.add(event["rate_per_day"])
+        self.assertGreater(len(rates), 1, "soiling rate identical at every seed: {}".format(rates))
+
+    def test_unit_level_faults_are_not_at_the_top_rung(self):
+        """A unit drop of m costs the SITE about m/N, so recording the top rung
+        for one would mislabel the ladder's most important point by 2-7x."""
+        frames = self.frames()
+        assumptions = fault_injection.load_assumptions()
+        for seed in (42, 7, 1, 3):
+            for event in fault_injection.choose_events(frames, assumptions, seed=seed, count=4):
+                if event.get("unit_id"):
+                    self.assertLessEqual(event["magnitude_pct"], 0.12)
+                    self.assertIn("unit_count", event,
+                                  "no unit_count — the label cannot be converted to site severity")
 
 
 if __name__ == "__main__":

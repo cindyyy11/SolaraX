@@ -583,16 +583,46 @@ def build_economics(site, assumptions, divergence, severity, exceeds_threshold):
     tariff = assumptions["tariff_rm_per_kwh"]
     nominal_yield = assumptions["assumed_yield_kwh_per_kwp_day"]
 
-    loss_fraction = round(0.05 + severity * 0.12, 4)
     expected_monthly_kwh = site["capacity_kwp"] * nominal_yield * 30
+
+    # PLACEHOLDER severity model. TODO(owner A, M3): delete — the loss comes from
+    # (cohort_median_PI - site_PI) x expected_kwh, not from a severity dial.
+    #
+    # DERIVED FROM THE THRESHOLD, NOT HARDCODED. This was `0.05 + severity * 0.12`,
+    # tuned by hand against a tariff of RM 0.4899. When the RP4 correction dropped
+    # the tariff 11%, both dispatched sites silently fell below the RM 1500
+    # threshold while the screens still called them dispatches — a site flagged
+    # for a RM 1500 visit to recover RM 1437/month, on a page printing both.
+    #
+    # Scaffolding has to stay coherent when a real constant moves. So the
+    # dispatch tier is pinned just above whatever the threshold currently
+    # implies, and the monitor tier just below it. Change the tariff and this
+    # follows; it cannot drift out of agreement again.
+    threshold_fraction = (assumptions["dispatch_threshold_rm_per_month"]
+                          / (tariff * expected_monthly_kwh)) if expected_monthly_kwh else 0.0
+    if severity >= 0.5:
+        loss_fraction = round(threshold_fraction * 1.15, 4)   # dispatch: clears it
+    else:
+        loss_fraction = round(threshold_fraction * 0.45, 4)   # monitor: does not
+
     kwh_lost_monthly = round(expected_monthly_kwh * loss_fraction, 1)
 
     days_since = divergence["days_since"]
     cumulative_kwh_lost = round(kwh_lost_monthly / 30 * days_since, 1)
 
+    rm_at_risk_monthly = round(kwh_lost_monthly * tariff, 2)
+
+    # Derived, not asserted. A site is worth visiting when the monthly loss
+    # exceeds the cost of going — that is arithmetic on two numbers in this same
+    # payload, and it must be computed as such so the two can disagree and be
+    # caught. `exceeds_threshold` is honoured only when a caller passes it
+    # explicitly, which nothing in this module now does.
+    if exceeds_threshold is None:
+        exceeds_threshold = rm_at_risk_monthly >= assumptions["dispatch_threshold_rm_per_month"]
+
     return {
         "kwh_lost_monthly": kwh_lost_monthly,
-        "rm_at_risk_monthly": round(kwh_lost_monthly * tariff, 2),
+        "rm_at_risk_monthly": rm_at_risk_monthly,
         "cumulative_kwh_lost": cumulative_kwh_lost,
         "cumulative_loss_rm": round(cumulative_kwh_lost * tariff, 2),
         "loss_pct_of_expected": loss_fraction,
@@ -769,8 +799,16 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
         cohort_label = cohort["label"] if cohort else "ungrouped"
 
         divergence = build_divergence(severity)
-        economics = build_economics(
-            site, assumptions, divergence, severity, exceeds_threshold=(status == "dispatch"))
+
+        # exceeds_dispatch_threshold is DERIVED FROM THE MONEY, never from the
+        # status. Setting it to (status == "dispatch") made it a restatement of
+        # the triage decision, and validator rule 11 then compared the two — a
+        # tautology that could never fail. It hid a real contradiction: after the
+        # RP4 tariff correction dropped the rate 11%, both dispatched sites fell
+        # below the RM 1500 threshold while still claiming to exceed it, on a
+        # screen that prints the threshold.
+        economics = build_economics(site, assumptions, divergence, severity,
+                                    exceeds_threshold=None)
 
         site_object["detection"] = build_detection(cohort_size, meets_minimum, severity)
         site_object["divergence"] = divergence

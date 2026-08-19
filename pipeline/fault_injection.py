@@ -280,14 +280,25 @@ def build_event(site_id, fault_type, injected_from, magnitude, assumptions,
         # This previously discarded severity_scale entirely, so every soiling
         # event was identical regardless of its ladder position and a third of
         # the ladder was decorative.
+        # Round the SCALE first, then derive the rate from the rounded value, so
+        # base_rate_per_day x severity_scale == rate_per_day exactly as recorded.
+        # Rounding them independently left the label file failing its own
+        # arithmetic — in the one artifact whose whole purpose is being auditable.
         base_rate = assumptions["soiling_rate_per_day"]
-        event["rate_per_day"] = round(base_rate * severity_scale, 6)
+        scale = round(severity_scale, 4)
+        event["rate_per_day"] = round(base_rate * scale, 8)
         event["base_rate_per_day"] = base_rate
-        event["severity_scale"] = round(severity_scale, 4)
+        event["severity_scale"] = scale
         event["max_loss_fraction"] = assumptions["soiling_max_loss_fraction"]
         # magnitude_pct is meaningless for a ramp — the loss depends on how long
         # it has been running. The factor comes from rate and floor, never this.
         event["magnitude_pct"] = None
+
+    # Recorded for every event, not only string_loss. A unit-level fault costs
+    # the site roughly magnitude/N, so a consumer cannot convert the label into a
+    # site-level severity without N.
+    if unit_count:
+        event["unit_count"] = int(unit_count)
 
     if fault_type == "string_loss":
         if not unit_count or unit_count < 2:
@@ -370,8 +381,12 @@ def choose_events(frames, assumptions, seed, count):
     #
     # Each start is drawn from the middle third of the window, leaving a clean
     # baseline before it and enough days after for a detector to have a chance.
-    earliest = len(dates) // 4
-    latest = len(dates) // 2
+    # The middle third, as stated — this previously drew from the SECOND QUARTER
+    # while the comment promised a third of the way in, shortening the clean
+    # baseline a detector needs. max(1, ...) keeps randrange non-empty on a short
+    # window; a window under ~4 days cannot carry a meaningful injection anyway.
+    earliest = max(1, len(dates) // 3)
+    latest = max(earliest + 1, (len(dates) * 2) // 3)
 
     # THE SEVERITY LADDER. Descending, so the recall curve has a genuine failure
     # region rather than a wall of easy cases — publishing where the detector
@@ -394,35 +409,44 @@ def choose_events(frames, assumptions, seed, count):
     #                 Honest variation beats a fabricated one.
     reference_severity = ladder[0]
 
-    if len(chosen) < count:
-        # Silent truncation would leave a thinner ladder than the caller asked
-        # for, and they would score against it without knowing.
-        print("  ! asked for {} injection sites, the constraints allow {}.".format(count, len(chosen)))
-        print("    An {}-site fleet in {} cohorts cannot hold a deep ladder in ONE run:".format(
-            len(set(frames["fleet"]["site_id"])), len(set(cohort_of.values()))))
-        print("    never more than half a cohort, and controls must remain.")
-        print("    For a full recall curve, run several seeds and pool the labels —")
-        print("    a curve built from 4 points is a line with pretensions.")
+    # TYPE AND RUNG MUST NOT BOTH COME FROM THE LOOP INDEX.
+    #
+    # They did: fault_type from `index % 3` and severity from `ladder[index % 6]`.
+    # So soiling_ramp only ever landed at index 1, always drawing rung 0.25 — its
+    # rate came out at 0.003357 in EVERY run at EVERY seed, and the fix that was
+    # supposed to make it ladder achieved nothing. Reseeding could not help,
+    # because the rung was a function of position, not of the seed.
+    #
+    # The type rotation is now offset by the seed, so across pooled runs each
+    # type visits different rungs.
+    offset = generator.randrange(3)
 
     events = []
     for index, site_id in enumerate(chosen):
         units = int(hardware["unit_count"].get(site_id, 1))
         severity = ladder[index % len(ladder)]
+        slot = (index + offset) % 3
 
-        if index % 3 == 1:
+        if slot == 1:
             fault_type = "soiling_ramp"
-        elif index % 3 == 2 and units >= 2:
+        elif slot == 2 and units >= 2:
             fault_type = "string_loss"
         else:
             fault_type = "step_drop"
 
         # A unit-level step_drop gives the Screen 2 sub-site view something real.
         # string_loss is site-level by definition — see factor_for_day.
+        #
+        # NOT AT THE TOP RUNG. A unit-level drop of m costs the SITE about m/N,
+        # so pairing it with rung 0 recorded 0.35 for a site that lost 0.17 on two
+        # units, or 0.05 on seven — the ladder's most important point mislabelled
+        # by 2-7x. Unit-level faults now take the lowest rungs, where being a
+        # fraction of the site is the intent rather than an error.
         unit_id = None
-        if fault_type == "step_drop":
+        if fault_type == "step_drop" and severity <= 0.12:
             site_units = sorted(
                 frames["inverter"].loc[frames["inverter"]["site_id"] == site_id, "inverter_id"].unique())
-            if site_units and index % 6 == 0:
+            if site_units:
                 unit_id = site_units[generator.randrange(len(site_units))]
 
         events.append(build_event(
@@ -651,6 +675,17 @@ def main():
 
     for event in events:
         apply_event(frames, event)
+
+    if args.ladder and len(events) < args.count:
+        # Reported by the CLI, not by choose_events — library code printing made
+        # every test run emit this banner and gave a programmatic caller nothing
+        # to read. The fact is already `len(events) < count` at the return.
+        print("  ! asked for {} injection sites, the constraints allow {}.".format(
+            args.count, len(events)))
+        print("    Causes: never more than half a cohort, controls must remain, and")
+        print("    sites already below the plausibility floor are skipped.")
+        print("    For a real recall curve, pool several seeds — a curve built from")
+        print("    {} points is a line with pretensions.\n".format(len(events)))
 
     print("injected {} event(s), seed {}".format(len(events), args.seed))
     for event in events:

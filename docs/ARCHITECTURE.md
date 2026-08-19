@@ -100,7 +100,7 @@ Four further Clark County / Henderson systems (QA-fail) extend the fleet to 12 f
 | `DATASETS.md` §6.2 | "confirm volume — 136 systems may be large" | Resolved: the chosen cohort is **1.22 GB** |
 | `TECHNICAL.md` §2 | "15-min intervals" | **1-minute** for the systems checked; varies by system |
 | `TECHNICAL.md` §2 | implies wide columns | **Long-format EAV**; requires a metrics join and pivot |
-| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds, and exceeded — **2 cohorts, 11 sites, 3 Köppen zones** as shipped |
+| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds, and exceeded — **2 cohorts, 11 sites, 2 Köppen zones** (`Cfa`, `Bwh`) as shipped |
 
 ---
 
