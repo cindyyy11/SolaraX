@@ -489,7 +489,7 @@ published Malaysian instance of exactly this divergence. Cite as corroboration, 
 | Days | Work | Gate |
 |---|---|---|
 | 16–18 Aug | M1 ingestion + frozen schema; M2 baseline; hand-check one site-day | M2 matches hand calculation |
-| 19–21 Aug | M3 cohorts + z-score + curtailment; M4 economics; injection harness | **21 Aug: HKUST gate** — add only if M1→M4 runs end-to-end |
+| 19–21 Aug | M3 cohorts + z-score + curtailment; M4 economics; injection harness ✅ | ~~**21 Aug: HKUST gate**~~ ✅ **Closed 19 Aug — ship PVDAQ.** M2/M3 unbuilt, so the condition failed; HKUST is one campus and cannot exercise cross-cohort clustering |
 | 22–24 Aug | Validation run; Supabase load; nightly Action green; Vue dashboard | Real precision/recall figure exists |
 | 25–26 Aug | Deck, summary, demo video, this doc → PDF; red-team (PRD v2 §13) | Submission complete |
 | 27–31 Aug | Buffer — no new features | Supabase awake, Action green |

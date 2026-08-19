@@ -65,7 +65,9 @@ single trip, so per-site `cost_per_visit_rm` overstates the saving here — this
 cohort is a detector showcase (perfect weather control, irradiance error cancels
 exactly), not an economics showcase. That is what DSUN-01 is for.
 
-Below-minimum cohort — **GOLDEN-01**, two sites, Köppen `BSk`:
+> **DROPPED 19 Aug 2026 — do not fetch this cohort.** Both systems returned no rows. Kept below only as the record of what was planned. See the correction at the top of this document.
+
+~~Below-minimum cohort — **GOLDEN-01**, two sites, Köppen `BSk`:~~
 
 | system_id | Name | kWp | Location | 2019 coverage |
 |---|---|---|---|---|
@@ -83,9 +85,14 @@ on the 15th.
 
 These two are also 75% of the fleet's download weight (≈594 MB of ≈790 MB) for
 a cohort whose only job is to render a caution badge. Applying this document's
-own instruction to pull selectively: **fetch GOLDEN-01 for the 90-day series
-window only**, mark both sites `healthy`, and rely on SCHEMA §8.7 — healthy
-sites omit `series.cohort` entirely. That drops the fleet to roughly 425 MB.
+own instruction to pull selectively: ~~**fetch GOLDEN-01 for the 90-day series
+window only**, mark both sites `healthy`~~, and rely on SCHEMA §8.7 — healthy
+sites omit `series.cohort` entirely.
+
+> **Superseded 19 Aug 2026.** GOLDEN-01 is not fetched at all. Marking those two
+> sites `healthy` is exactly what went wrong: they rendered as healthy with no
+> measurements behind them, carrying 54% of headline capacity. The download
+> weight argument was right; the conclusion should have been to drop them.
 
 > **Warning, learned the hard way three times.** The catalogue's
 > `first_timestamp` / `last_timestamp` columns do **not** imply continuous
@@ -107,8 +114,8 @@ Estimated pull, from catalogue `dataset_size_mb ÷ years × 233`:
 |---|---|---|
 | DSUN-01 | 5 | ~120 |
 | VEGAS-01 | 6 | ~77 |
-| GOLDEN-01 | 2 | ~594 full → ~230 at the 90-day slice |
-| **Total** | **13** | **~790 full → ~425 sliced** |
+| ~~GOLDEN-01~~ | ~~2~~ | ~~dropped 19 Aug — no data returned~~ |
+| **Total** | **11** | **~197 MB** |
 
 ~3,029 files at full window. Verify with `--dry-run` in Stage 4 before pulling.
 
@@ -299,7 +306,8 @@ Isolate the file-writing function at the bottom with a clear comment marking it
 as the stable interface teammates must preserve.
 
 **Done when:** `dispatch.json` exists, contains all six top-level keys, and both
-cohorts appear with GOLDEN-01 flagged `meets_minimum: false`.
+cohorts (DSUN-01, VEGAS-01) appear. *Updated 19 Aug 2026 — GOLDEN-01 dropped, so
+there is no `meets_minimum: false` cohort to check for.*
 
 ---
 

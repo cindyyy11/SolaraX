@@ -277,7 +277,7 @@ NFR and the BUILT/SIMULATED discipline. **PRD v2 §4 needs updating to match.**
 |---|---|
 | **Day 1 (16 Aug)** | **Verify PVDAQ S3 access, partitions, columns.** Clean-venv install test. Create Supabase project. **Commit.** |
 | 16–18 Aug | M1 ingestion + source adapter interface + canonical schema (frozen). M2 pvlib baseline. Hand-check M2 against one site-day |
-| 19–21 Aug | M3 cohorts + robust z-score + curtailment stack. M4 economic ranking with RP4 config. Fault-injection harness. **21 Aug: HKUST gate decision (§3.2)** |
+| 19–21 Aug | M3 cohorts + robust z-score + curtailment stack. M4 economic ranking with RP4 config. Fault-injection harness ✅. ~~**21 Aug: HKUST gate decision (§3.2)**~~ ✅ **Closed 19 Aug — ship PVDAQ.** See [`DECISIONS.md`](./DECISIONS.md) |
 | 22–24 Aug | Validation run → real precision/recall/days-to-detect. Supabase load + nightly GitHub Action green. Vue dashboard |
 | 25–26 Aug | Deck, summary, demo video, `ARCHITECTURE.md` → PDF. Red-team ([PRD v2 §13](./PRD.md)) |
 | 27–31 Aug | Buffer. No new features. **Confirm Supabase project is awake and the nightly action is green** |
