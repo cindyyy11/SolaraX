@@ -70,7 +70,7 @@ def minimal_valid_payload():
                  "site_count": 1, "dispatched": False},
             ],
             "estimated_saving_rm": 1500,
-            "total_rm_at_risk": 500.0,
+            "total_rm_at_risk": 1600.0,
             "cohort_count": 1,
         },
         "roi": {
@@ -81,7 +81,7 @@ def minimal_valid_payload():
             "faults_confirmed": 2,
             "faults_confirmed_basis": "test fixture — a payload claiming confirmed faults must say what confirmed them",
             "generation_recovered_kwh": 1000.0,
-            "rm_protected_cumulative": 489.9,
+            "rm_protected_cumulative": 1567.68,
         },
         "cohorts": [
             {
@@ -124,9 +124,9 @@ def minimal_valid_payload():
                 "divergence": {"start_date": "2026-07-01", "days_since": 30},
                 "economics": {
                     "kwh_lost_monthly": 1000.0,
-                    "rm_at_risk_monthly": 500.0,
+                    "rm_at_risk_monthly": 1600.0,
                     "cumulative_kwh_lost": 1000.0,
-                    "cumulative_loss_rm": 489.9,
+                    "cumulative_loss_rm": 1567.68,
                     "loss_pct_of_expected": 0.1,
                     "exceeds_dispatch_threshold": True,
                     "calculation": "test",

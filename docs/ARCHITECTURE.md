@@ -63,6 +63,8 @@ grid is mandatory, not optional.
 
 ### 1.4 ✅ Finding 3 — a better fleet exists: greater Las Vegas
 
+> **Superseded, 19 Aug 2026.** What shipped is broader than this section describes: **11 sites across 2 cohorts** — DSUN-01 (5, MD/DE/NJ, `Cfa`) and VEGAS-01 (6, NV, `Bwh`) — not 8 sites in one Las Vegas region. Cross-cohort structure is a gain, not a compromise: it exercises the clustering step and shows the method generalises across weather regions, which a single cohort cannot. A third cohort, GOLDEN-01, was configured and then dropped — it had no time-series data. The analysis below stands as the reasoning that found the fleet; the numbers in it are the 16 Aug plan, not what runs.
+
 The systems that *do* have data are larger and more commercial than the California residential rows.
 Grouping the 157 by location and filtering to QA-pass:
 
@@ -98,7 +100,7 @@ Four further Clark County / Henderson systems (QA-fail) extend the fleet to 12 f
 | `DATASETS.md` §6.2 | "confirm volume — 136 systems may be large" | Resolved: the chosen cohort is **1.22 GB** |
 | `TECHNICAL.md` §2 | "15-min intervals" | **1-minute** for the systems checked; varies by system |
 | `TECHNICAL.md` §2 | implies wide columns | **Long-format EAV**; requires a metrics join and pivot |
-| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds — greater Las Vegas, 8 sites, 37 km |
+| `PRD.md` §8 | "multiple systems in a shared climate zone" | Holds, and exceeded — **2 cohorts, 11 sites, 2 Köppen zones** (`Cfa`, `Bwh`) as shipped |
 
 ---
 
@@ -487,7 +489,7 @@ published Malaysian instance of exactly this divergence. Cite as corroboration, 
 | Days | Work | Gate |
 |---|---|---|
 | 16–18 Aug | M1 ingestion + frozen schema; M2 baseline; hand-check one site-day | M2 matches hand calculation |
-| 19–21 Aug | M3 cohorts + z-score + curtailment; M4 economics; injection harness | **21 Aug: HKUST gate** — add only if M1→M4 runs end-to-end |
+| 19–21 Aug | M3 cohorts + z-score + curtailment; M4 economics; injection harness ✅ | ~~**21 Aug: HKUST gate**~~ ✅ **Closed 19 Aug — ship PVDAQ.** M2/M3 unbuilt, so the condition failed; HKUST is one campus and cannot exercise cross-cohort clustering |
 | 22–24 Aug | Validation run; Supabase load; nightly Action green; Vue dashboard | Real precision/recall figure exists |
 | 25–26 Aug | Deck, summary, demo video, this doc → PDF; red-team (PRD v2 §13) | Submission complete |
 | 27–31 Aug | Buffer — no new features | Supabase awake, Action green |

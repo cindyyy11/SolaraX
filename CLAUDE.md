@@ -39,7 +39,7 @@ SolaraX/
 | [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) | Competition rules, rubric, deadlines, live risks |
 | [`hinfo/SUBMISSION-CHECKLIST.md`](./hinfo/SUBMISSION-CHECKLIST.md) | Deliverable-by-deliverable status |
 | [`hinfo/maicnexus-extract/`](./hinfo/maicnexus-extract/) | Verbatim official rules as captured |
-| [`config/fleet_sites.csv`](./config/fleet_sites.csv) | The 13 verified sites, three cohorts |
+| [`config/fleet_sites.csv`](./config/fleet_sites.csv) | The 11 verified sites, two cohorts |
 | [`data/`](./data/) | Reference data pulled into the repo — e.g. PVGIS-ERA5 at Bukit Raja/Klang |
 
 ---
@@ -227,7 +227,7 @@ DuckDB — never serial.
 
 ---
 
-## The fleet — 13 sites, 3 cohorts, all verified
+## The fleet — 11 sites, 2 cohorts, all carrying real data
 
 Full detail in [`config/fleet_sites.csv`](./config/fleet_sites.csv) and
 [`docs/BUILD_PLAN.md`](./docs/BUILD_PLAN.md).
@@ -236,9 +236,15 @@ Full detail in [`config/fleet_sites.csv`](./config/fleet_sites.csv) and
 |---|---|---|---|---|
 | **DSUN-01** | 5 | MD / DE / NJ | `Cfa` | **Primary.** One operator, ~162 km spread — the distributed C&I story, and the only cohort where per-site visit economics are honest |
 | **VEGAS-01** | 6 | NV | `Bwh` | Detector showcase. Five sites share byte-identical coordinates, so weather control is perfect and irradiance error cancels exactly |
-| **GOLDEN-01** | 2 | CO | `BSk` | Below `min_cohort_size` on purpose — makes PRD §15's minimum-density weakness visible rather than hidden |
 
 **Target window: 1 Jan – 21 Aug 2019** (233 days), applied fleet-wide. Bounded by system 1367.
+**Total 1.32 MWp**, 40.6 – 277.2 kWp per site — all genuine C&I rooftop scale.
+
+**GOLDEN-01 was dropped on 19 Aug 2026.** Its two NREL Golden systems had no rows in the
+processed data at all, while carrying 54% of the old headline capacity and rendering as
+*healthy*. A site with no measurements cannot be called healthy. Every site now on screen has
+real generation behind it. PRD §15's minimum-cohort weakness is still worth stating — it just
+does not need two empty rows to make the point.
 
 Two consequences worth remembering: VEGAS-01's shared coordinate means **one technician covers all
 five Agassi roofs in a single trip**, so per-site `cost_per_visit_rm` overstates savings there — and

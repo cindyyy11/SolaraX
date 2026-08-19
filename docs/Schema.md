@@ -1,6 +1,6 @@
 # SolaraX — `dispatch.json` Schema
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 **Status:** FROZEN as of 15 Aug 2026
 **Owner:** D (Full-Stack)
 **Consumers:** `frontend/src/api.js` (all four screens)
@@ -640,15 +640,35 @@ in a judged repo beside real measurements; a seed regenerates it.
   "event_count": 4,
   "events": [
     {
-      "site_id": "S-1199", "unit_id": null, "fault_type": "string_loss",
-      "injected_from": "2019-03-19", "injected_until": null,
-      "magnitude_pct": 0.142857, "unit_count": 7,
-      "kwh_removed": 5298.3, "days_affected": 153,
+      "site_id": "S-1276", "unit_id": null, "fault_type": "step_drop",
+      "injected_from": "2019-05-12", "injected_until": null,
+      "magnitude_pct": 0.35, "unit_count": 1, "severity_scale": 1.0,
+      "kwh_removed": 10347.441, "days_affected": 102,
       "note": "SYNTHETIC — injected into real PVDAQ data. Not a real fault."
     }
   ]
 }
 ```
+
+Reproduce this exact record with `python pipeline/fault_injection.py --ladder
+--seed 42`. The previous example was hand-edited and no invocation produced it.
+
+**Start dates are staggered**, drawn from the seed across the middle third of the
+window. They are not a fixed offset — every fault sharing one date is a tell a
+detector can learn without detecting anything.
+
+**`severity_scale`** is on every event — its rung on the ladder, 1.0 at the top.
+`soiling_ramp` events additionally carry **`base_rate_per_day`** (the sourced
+Malaysian figure), and their `rate_per_day` is **exactly** `base_rate_per_day ×
+severity_scale` — the scale is rounded and the rate is the unrounded product of
+the two recorded values, so `base * scale == rate` evaluates True. `magnitude_pct` is `null` for a ramp: the loss depends on how long it
+has run.
+
+**`unit_count` is present on every event at a site with inverters**, not only
+`string_loss`. A unit-level fault of magnitude *m* costs the site roughly *m/N*,
+so a consumer cannot convert the label to a site-level severity without N. Such
+faults are placed at the ladder's **low** rungs, where being a fraction of the
+site is the intent rather than a mislabelling.
 
 **Dates here are SOURCE dates (2019).** `generate_dispatch.py` applies the §9
 remap when it emits the per-site block, so the remap stays in exactly one place.
@@ -727,6 +747,7 @@ stops scaffolding shipping to a judge.
 | 1.3.0 | 17 Aug 2026 | Added `sites[].excluded_from_analysis` and cohort `analysed_site_ids` / `analysed_count` / `excluded_site_ids`. A site whose telemetry falls below `assumptions.min_plausible_performance_index` is forced `healthy`, never ranked, and never drawn as a peer. `meets_minimum` is now judged on `analysed_count`, not raw membership. Additive only (D) |
 | 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
 | 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Also documents `ground_truth.json`'s top-level shape and adds `assumptions.soiling_rate_per_day` / `soiling_max_loss_fraction` for `pipeline/fault_injection.py`. Additive only; no field renamed or removed (C) |
+| 1.6.0 | 19 Aug 2026 | `ground_truth.json` events gain `severity_scale` (every event) and `base_rate_per_day` (soiling); `unit_count` now on every event with inverters, not only `string_loss`; start dates staggered. `dispatch.json` unchanged — this bumps because the label file is a documented contract owner A loads against, and 1.4.0 set the precedent of a row for a purely additive field. Additive only (C) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.

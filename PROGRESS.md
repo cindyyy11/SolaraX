@@ -4,7 +4,7 @@
 > [`CLAUDE.md`](./CLAUDE.md); this file is status and nothing else. Update it at the end of every
 > working session — append to the log, don't rewrite history.
 
-**Last updated: 16 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **15 days left**
+**Last updated: 19 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **12 days left**
 
 ---
 
@@ -12,11 +12,11 @@
 
 | | |
 |---|---|
-| **Phase** | Phase 1 (Fleet Foundation) — **overdue**, was due 15 Aug |
-| **Code written** | **None.** Modules 1–8 not started |
-| **Architecture** | ✅ Agreed — [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCHITECTURE-PLAN.md). Full `ARCHITECTURE.md` not yet written |
-| **Repo** | Reorganised 16 Aug. **1 commit**, needs ≥3 over ≥2 calendar days |
-| **Public URL** | None. Repo returns 404 to the public |
+| **Phase** | Phase 2 — M1 shipped, M4 economics shipped, M2/M3 not started |
+| **Code written** | Pipeline + 4 dashboard screens run on real data. **23 PLACEHOLDER values remain** |
+| **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
+| **Schema** | 1.5.0, frozen, 19 validator rules · 45 validator tests · 26 injection tests |
+| **Public URL** | None yet |
 
 ---
 
@@ -26,10 +26,10 @@
 |---|---|---|---|
 | 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission** | Cindy (repo owner) |
 | 2 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
-| 3 | **No code yet** | Phase 1 overdue. M1 ingestion is now fully specified in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §3 — start there | — |
+| 3 | **M2 and M3 unbuilt** | Every RM figure is arithmetic on a placeholder loss fraction until the detector exists. This is the 25% Technical Feasibility row | Cindy (A) |
 
-**Cleared 16 Aug:** ~~PVDAQ S3 unverified~~ (verified, fleet changed) · ~~1 commit / untracked~~
-(4 commits over 2 days) · ~~empty README~~ (written).
+**Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug:
+M1, M4, dashboard, harness all shipped).
 
 ---
 
@@ -37,13 +37,13 @@
 
 | Milestone | Due | Status |
 |---|---|---|
-| M1: real numbers from real data across ≥5 sites | 15 Aug | 🔴 **Missed** |
-| M2: one API call returns the ranked dispatch list end-to-end | 20 Aug | ⬜ Not started |
-| M3: someone outside the team opens the URL and gets it in 15 seconds | 24 Aug | ⬜ Not started |
+| M1: real numbers from real data across ≥5 sites | 15 Aug | ✅ **Met** (late, 17 Aug) — 11 sites, 2 cohorts |
+| M2: one API call returns the ranked dispatch list end-to-end | 20 Aug | 🔴 **Will slip** — needs M2/M3 |
+| M3: someone outside the team opens the URL and gets it in 15 seconds | 24 Aug | ⬜ Not started — no public URL |
 | M4: submission complete with 5 days buffer | 26 Aug | ⬜ Not started |
 
-**Gate — 21 Aug:** if M1→M4 produces real dispatch output, add the HKUST dataset. If not, ship PVDAQ
-plus the Malaysian baseline panel. See [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCHITECTURE-PLAN.md) §3.2.
+~~**Gate — 21 Aug:** HKUST~~ ✅ **Closed 19 Aug — ship PVDAQ.** M2/M3 unbuilt, so the gate condition
+failed; HKUST cannot exercise cross-cohort clustering anyway. See [`docs/DECISIONS.md`](./docs/DECISIONS.md).
 
 ---
 
@@ -51,20 +51,48 @@ plus the Malaysian baseline panel. See [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCH
 
 | # | Module | Status |
 |---|---|---|
-| 1 | Fleet Data Ingestion | ⬜ Not started |
-| 2 | Sensor-Free Baseline | ⬜ Not started |
-| 3 | **Fleet Peer Benchmarking** ⭐ | ⬜ Not started — method decided (robust z-score, median/MAD) |
-| 4 | Economic Ranking | ⬜ Not started — RP4 base rate found, components need a primary source |
-| 5 | Drone & Visual Verification | ⬜ Not started |
-| 6 | Dashboard (Vue 3) | ⬜ Not started |
-| 7 | API / Supabase | ⬜ Not started |
-| 8 | Testing & Packaging | ⬜ Not started |
+| 1 | Fleet Data Ingestion | ✅ **Built** — real PVDAQ, 11 sites, 2 cohorts (Chang Zhe covering; owned by C) |
+| 2 | Sensor-Free Baseline | ⬜ Not started — `expected_kwh` is null, `irradiance_source` NONE (A) |
+| 3 | **Fleet Peer Benchmarking** ⭐ | ⬜ Not started — flagged sites are a hardcoded list (A) |
+| 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. Inputs stay placeholder until M3 (C) |
+| 5 | Drone & Visual Verification | ⬜ Not started — `evidence` block not emitted (B) |
+| 6 | Dashboard (Vue 3) | ✅ **Built** — four screens, zero console errors (D) |
+| 7 | API / Supabase | ⬜ Not started (D) |
+| 8 | Testing & Packaging | 🟡 Partial — 71 pipeline tests; no demo video (E) |
+
+**71 pipeline tests.** **Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
+fault-injection harness producing M3's ground truth.
 
 ---
 
 ## Log
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
+
+### 19 Aug 2026 — tariff sourced, fleet corrected, two decisions closed
+
+- **RP4 tariff corrected.** The AFA half was wrong in kind: ST sets it **monthly** and it has been
+  negative in **9 of 14 months** of RP4 (range −8.91 to +3.80 sen/kWh). Our hardcoded +3.59 was
+  July 2026's value frozen as structural, overstating the period mean by **12%**. Now RM 0.4373
+  (45.40 − 1.67 mean), range RM 0.3649–0.4920 from published rates. Fleet at risk RM 3,808 → 5,183 (the tariff cut it, then the placeholder loss fraction was restated as a stated 25% rather than derived from the threshold — see 19 Aug review fixes).
+  Evidence: [`docs/RESEARCH.md`](./docs/RESEARCH.md) §4.1.
+- **GOLDEN-01 dropped.** Its two NREL sites had **no rows in the processed data** while carrying 54%
+  of headline capacity and showing as *healthy*. Fleet is now **11 sites, 1.32 MWp, 2 cohorts**.
+- **HKUST gate closed early** — ship PVDAQ.
+- **Fault-injection harness shipped** — three fault types, seeded ladder, exactly reversible to
+  1e-9. This is the ground truth M3's accuracy figure depends on.
+- **Fleet docs reconciled** — `CLAUDE.md`, `BUILD_PLAN.md`, `ARCHITECTURE.md`, `DATASETS.md` and
+  `ARCHITECTURE-PLAN.md` all described an 8-site Las Vegas fleet that never shipped.
+
+### 18 Aug 2026 — roles resolved, M4 economics corrected
+
+- **Roles confirmed:** Cindy AI/ML (A) · Xin Rou CV (B) · MK Data (C) · Chang Zhe Full-Stack (D) ·
+  Zhuo Heng Product (E).
+- **Chang Zhe's pipeline + dashboard merged** (PR #1, #3).
+- **M4 corrected** (PR #5): saving is per **trip** not per site — RM 16,500 → RM 7,500, because
+  co-located sites are one mobilisation and a trip isn't avoided if you're already dispatching
+  there. ROI no longer multiplies one month by six. Four overclaiming labels fixed.
+- **Malaysian reference cases** (PR #3): four sites via PVGIS-ERA5, parameters enforced not assumed.
 
 ### 16 Aug 2026 (later) — PVDAQ verified, demo fleet changed, ARCHITECTURE.md written
 

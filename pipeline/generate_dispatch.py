@@ -51,7 +51,7 @@ FRONTEND_PUBLIC_DIR = os.path.join(REPOSITORY_ROOT, "apps", "web", "public")
 # These are not commercial constants (those live in config/assumptions.json).
 # They describe the shape of the artifact and the date axis.
 
-SCHEMA_VERSION = "1.5.0"
+SCHEMA_VERSION = "1.6.0"
 PIPELINE_VERSION = "0.4.0-placeholder"
 
 SERIES_DAY_COUNT = 90          # docs/Schema.md section 8.6
@@ -73,13 +73,23 @@ DATE_REMAP_TARGET_YEAR = 2026
 PLACEHOLDER_DISPATCH_SITE_IDS = ["1203", "34", "1367"]
 PLACEHOLDER_MONITOR_SITE_IDS = ["1199", "1278"]
 
+# Scaffolding loss fractions, chosen so the four screens render a coherent
+# queue and nothing more. Arbitrary and labelled as such — but ARBITRARY AND
+# FIXED beats derived-from-the-threshold, which silently made every site's loss
+# identical. M3 replaces both.
+# 0.25 is a plausible magnitude for a serious fault, and it is also close to the
+# floor at which the smallest dispatch-tier site still clears the threshold under
+# the PESSIMISTIC tariff (RM 0.3649): 146.64 kWp needs ~0.246 to survive that
+# corner. Below it, Screen 4's own toggle would contradict its own dispatch list.
+PLACEHOLDER_DISPATCH_LOSS_FRACTION = 0.25
+PLACEHOLDER_MONITOR_LOSS_FRACTION = 0.08
+
 PLACEHOLDER_DETECTION_METHOD = "PLACEHOLDER — cohort mean deviation, to be replaced by M3 (owner A)"
 PLACEHOLDER_CLUSTERING_METHOD = "PLACEHOLDER — cohort_id read from config/fleet_sites.csv, to be replaced by M3 (owner A)"
 
 COHORT_LABELS = {
     "DSUN-01": "Mid-Atlantic distributed cluster",
     "VEGAS-01": "Greater Las Vegas cluster",
-    "GOLDEN-01": "Golden, CO cluster",
 }
 
 
@@ -583,16 +593,38 @@ def build_economics(site, assumptions, divergence, severity, exceeds_threshold):
     tariff = assumptions["tariff_rm_per_kwh"]
     nominal_yield = assumptions["assumed_yield_kwh_per_kwp_day"]
 
-    loss_fraction = round(0.05 + severity * 0.12, 4)
     expected_monthly_kwh = site["capacity_kwp"] * nominal_yield * 30
+
+    # PLACEHOLDER severity. TODO(owner A, M3): delete — the real loss is
+    # (cohort_median_PI - site_PI) x expected_kwh.
+    #
+    # A STATED FRACTION, not one derived from the threshold. Deriving it from
+    # the threshold made rm_at_risk equal 1.15 x threshold for EVERY site, so
+    # the loss stopped being a property of the site: the dispatch ranking came
+    # down to 4th-decimal rounding, a monitor site showed worse fractional loss
+    # than a dispatch site, and fleet ESG rose 41% while the fleet lost 54% of
+    # its capacity. Money must follow the site; status then follows money.
+    loss_fraction = (PLACEHOLDER_DISPATCH_LOSS_FRACTION if severity >= 0.5
+                     else PLACEHOLDER_MONITOR_LOSS_FRACTION)
+
     kwh_lost_monthly = round(expected_monthly_kwh * loss_fraction, 1)
 
     days_since = divergence["days_since"]
     cumulative_kwh_lost = round(kwh_lost_monthly / 30 * days_since, 1)
 
+    rm_at_risk_monthly = round(kwh_lost_monthly * tariff, 2)
+
+    # Derived, not asserted. A site is worth visiting when the monthly loss
+    # exceeds the cost of going — that is arithmetic on two numbers in this same
+    # payload, and it must be computed as such so the two can disagree and be
+    # caught. `exceeds_threshold` is honoured only when a caller passes it
+    # explicitly, which nothing in this module now does.
+    if exceeds_threshold is None:
+        exceeds_threshold = rm_at_risk_monthly >= assumptions["dispatch_threshold_rm_per_month"]
+
     return {
         "kwh_lost_monthly": kwh_lost_monthly,
-        "rm_at_risk_monthly": round(kwh_lost_monthly * tariff, 2),
+        "rm_at_risk_monthly": rm_at_risk_monthly,
         "cumulative_kwh_lost": cumulative_kwh_lost,
         "cumulative_loss_rm": round(cumulative_kwh_lost * tariff, 2),
         "loss_pct_of_expected": loss_fraction,
@@ -769,8 +801,29 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
         cohort_label = cohort["label"] if cohort else "ungrouped"
 
         divergence = build_divergence(severity)
-        economics = build_economics(
-            site, assumptions, divergence, severity, exceeds_threshold=(status == "dispatch"))
+
+        # exceeds_dispatch_threshold is DERIVED FROM THE MONEY, never from the
+        # status. Setting it to (status == "dispatch") made it a restatement of
+        # the triage decision, and validator rule 11 then compared the two — a
+        # tautology that could never fail. It hid a real contradiction: after the
+        # RP4 tariff correction dropped the rate 11%, both dispatched sites fell
+        # below the RM 1500 threshold while still claiming to exceed it, on a
+        # screen that prints the threshold.
+        economics = build_economics(site, assumptions, divergence, severity,
+                                    exceeds_threshold=None)
+
+        # STATUS FOLLOWS MONEY. A site whose loss does not clear the cost of
+        # going is not a dispatch, whatever the detector thought of it — that is
+        # the entire point of having a threshold, and it is the product's actual
+        # argument. Demote rather than contradict.
+        #
+        # This also makes the artifact self-consistent under a tariff change:
+        # lower the rate enough and a dispatch becomes a monitor, instead of
+        # becoming a dispatch that visibly fails its own threshold on a screen
+        # that prints the threshold.
+        if status == "dispatch" and not economics["exceeds_dispatch_threshold"]:
+            status = "monitor"
+            site_object["status"] = status
 
         site_object["detection"] = build_detection(cohort_size, meets_minimum, severity)
         site_object["divergence"] = divergence

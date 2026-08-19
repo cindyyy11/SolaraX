@@ -251,16 +251,51 @@ def check_performance_index_numeric(payload, report):
 
 
 def check_threshold_agrees_with_status(payload, report):
-    """Rule 11 — economics.exceeds_dispatch_threshold agrees with status == dispatch."""
+    """Rule 11 — the threshold flag matches the money, and dispatch matches both.
+
+    This rule used to compare `exceeds_dispatch_threshold` against
+    `status == "dispatch"` — while the pipeline SET the flag to exactly that.
+    A tautology: it could never fail, and it hid a real contradiction after the
+    RP4 tariff correction, when both dispatched sites fell below the RM 1500
+    threshold while still claiming to exceed it.
+
+    Now checked against `assumptions.dispatch_threshold_rm_per_month`, which is
+    printed on Screen 4 beside these figures. A judge can do this arithmetic.
+    """
+    threshold = payload.get("assumptions", {}).get("dispatch_threshold_rm_per_month")
+    if not isinstance(threshold, (int, float)):
+        # Reported, not skipped. Guarding the comparison without saying the key
+        # is missing lets the whole rule pass vacuously on a malformed payload.
+        report.fail(11, "assumptions.dispatch_threshold_rm_per_month is missing or not "
+                        "numeric ({!r}), so no threshold check is possible".format(threshold))
+        return
+
     for site in payload.get("sites", []):
         economics = site.get("economics")
         if not economics:
             continue
-        exceeds = economics.get("exceeds_dispatch_threshold")
-        is_dispatch = site.get("status") == "dispatch"
-        if bool(exceeds) != is_dispatch:
-            report.fail(11, "site {} has status {!r} but exceeds_dispatch_threshold is {!r}".format(
-                site.get("site_id"), site.get("status"), exceeds))
+
+        exceeds = bool(economics.get("exceeds_dispatch_threshold"))
+        at_risk = economics.get("rm_at_risk_monthly")
+        status = site.get("status")
+
+        if isinstance(at_risk, (int, float)) and exceeds != (at_risk >= threshold):
+            report.fail(11, "site {} is at RM {}/month against a RM {} threshold but "
+                            "exceeds_dispatch_threshold is {!r}".format(
+                                site.get("site_id"), at_risk, threshold, exceeds))
+
+        # Both directions. A dispatch below the threshold is the commercially
+        # incoherent case — a technician sent to recover less than the trip costs,
+        # on a screen that prints both numbers. A monitor ABOVE it is the mirror:
+        # money left on the table with no explanation.
+        if status == "dispatch" and not exceeds:
+            report.fail(11, "site {} is status dispatch but exceeds_dispatch_threshold is "
+                            "False (RM {} against RM {})".format(
+                                site.get("site_id"), at_risk, threshold))
+        if status == "monitor" and exceeds:
+            report.fail(11, "site {} is status monitor but exceeds_dispatch_threshold is "
+                            "True (RM {} against RM {}) — a site worth visiting was not "
+                            "dispatched".format(site.get("site_id"), at_risk, threshold))
 
 
 def check_dispatch_ranks_contiguous(payload, report):

@@ -52,8 +52,9 @@ The load-bearing assumption was checked directly. Access works; **the fleet does
 - Data is **long-format EAV** (`metric_id` + `value`), requiring a per-system metrics join and a
   pivot — not the wide table the docs imply.
 - Resolution is **1-minute**, not the 15-minute `TECHNICAL.md` §2 claims.
-- **The demo fleet is now greater Las Vegas:** 8 QA-pass C&I rooftop sites, 40–277 kWp, within
-  37 km, 2,552 concurrent days, 1.22 GB, with per-inverter channels on three of them.
+- **The demo fleet as shipped is 11 sites in 2 cohorts** — DSUN-01 (5, MD/DE/NJ) and VEGAS-01
+  (6, NV), 40.6–277.2 kWp, 1.32 MWp total, 1 Jan – 21 Aug 2019, with per-inverter channels on
+  four of them. *Updated 19 Aug 2026 — broader than the 8-site Las Vegas plan written here.*
 
 Full detail and corrections in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1. **This is a better fleet
 than the original plan** — C&I rooftop in one weather region, which is the actual product target.
@@ -276,7 +277,7 @@ NFR and the BUILT/SIMULATED discipline. **PRD v2 §4 needs updating to match.**
 |---|---|
 | **Day 1 (16 Aug)** | **Verify PVDAQ S3 access, partitions, columns.** Clean-venv install test. Create Supabase project. **Commit.** |
 | 16–18 Aug | M1 ingestion + source adapter interface + canonical schema (frozen). M2 pvlib baseline. Hand-check M2 against one site-day |
-| 19–21 Aug | M3 cohorts + robust z-score + curtailment stack. M4 economic ranking with RP4 config. Fault-injection harness. **21 Aug: HKUST gate decision (§3.2)** |
+| 19–21 Aug | M3 cohorts + robust z-score + curtailment stack. M4 economic ranking with RP4 config. Fault-injection harness ✅. ~~**21 Aug: HKUST gate decision (§3.2)**~~ ✅ **Closed 19 Aug — ship PVDAQ.** See [`DECISIONS.md`](./DECISIONS.md) |
 | 22–24 Aug | Validation run → real precision/recall/days-to-detect. Supabase load + nightly GitHub Action green. Vue dashboard |
 | 25–26 Aug | Deck, summary, demo video, `ARCHITECTURE.md` → PDF. Red-team ([PRD v2 §13](./PRD.md)) |
 | 27–31 Aug | Buffer. No new features. **Confirm Supabase project is awake and the nightly action is green** |
