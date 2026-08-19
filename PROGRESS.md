@@ -74,7 +74,7 @@ Newest first. One entry per working session — what changed, what was decided, 
 - **RP4 tariff corrected.** The AFA half was wrong in kind: ST sets it **monthly** and it has been
   negative in **9 of 14 months** of RP4 (range −8.91 to +3.80 sen/kWh). Our hardcoded +3.59 was
   July 2026's value frozen as structural, overstating the period mean by **12%**. Now RM 0.4373
-  (45.40 − 1.67 mean), range RM 0.3649–0.4920 from published rates. Fleet at risk RM 3,808 → 3,399.
+  (45.40 − 1.67 mean), range RM 0.3649–0.4920 from published rates. Fleet at risk RM 3,808 → 5,183 (the tariff cut it, then the placeholder loss fraction was restated as a stated 25% rather than derived from the threshold — see 19 Aug review fixes).
   Evidence: [`docs/RESEARCH.md`](./docs/RESEARCH.md) §4.1.
 - **GOLDEN-01 dropped.** Its two NREL sites had **no rows in the processed data** while carrying 54%
   of headline capacity and showing as *healthy*. Fleet is now **11 sites, 1.32 MWp, 2 cohorts**.

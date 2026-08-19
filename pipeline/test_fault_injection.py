@@ -318,12 +318,20 @@ class TestAgainstRealData(unittest.TestCase):
         for one would mislabel the ladder's most important point by 2-7x."""
         frames = self.frames()
         assumptions = fault_injection.load_assumptions()
-        for seed in (42, 7, 1, 3):
+        top_rung = 0.35
+        seen = 0
+        # Sweep enough seeds to actually find one: only three analysable sites
+        # carry inverter rows, so ~38% of seeds produce a unit-level event. The
+        # previous version swept four seeds, found none, and passed vacuously.
+        for seed in range(1, 60):
             for event in fault_injection.choose_events(frames, assumptions, seed=seed, count=4):
                 if event.get("unit_id"):
-                    self.assertLessEqual(event["magnitude_pct"], 0.12)
+                    seen += 1
+                    self.assertLess(event["magnitude_pct"], top_rung)
                     self.assertIn("unit_count", event,
                                   "no unit_count — the label cannot be converted to site severity")
+        self.assertGreater(seen, 0, "no unit-level event in 59 seeds — the Screen 2 sub-site "
+                                    "view has nothing to render")
 
 
 if __name__ == "__main__":

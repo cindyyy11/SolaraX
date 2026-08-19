@@ -284,9 +284,15 @@ def build_event(site_id, fault_type, injected_from, magnitude, assumptions,
         # base_rate_per_day x severity_scale == rate_per_day exactly as recorded.
         # Rounding them independently left the label file failing its own
         # arithmetic — in the one artifact whose whole purpose is being auditable.
+        # NOT ROUNDED. Rounding the product broke the equality this records:
+        # base_rate_per_day x severity_scale == rate_per_day evaluated False at
+        # the 0.25 rung. An auditor scripting that check on the one artifact
+        # whose purpose is being auditable got a failure. The scale is rounded,
+        # the rate is the exact product of the recorded values. Long floats are a
+        # fair price for a label file that passes its own arithmetic.
         base_rate = assumptions["soiling_rate_per_day"]
         scale = round(severity_scale, 4)
-        event["rate_per_day"] = round(base_rate * scale, 8)
+        event["rate_per_day"] = base_rate * scale
         event["base_rate_per_day"] = base_rate
         event["severity_scale"] = scale
         event["max_loss_fraction"] = assumptions["soiling_max_loss_fraction"]
@@ -299,6 +305,12 @@ def build_event(site_id, fault_type, injected_from, magnitude, assumptions,
     # site-level severity without N.
     if unit_count:
         event["unit_count"] = int(unit_count)
+
+    # On every event, not only soiling. It lived inside the soiling branch, so
+    # the descent test's filter admitted only soiling events — usually a
+    # single-element list, trivially sorted. Coverage went DOWN relative to the
+    # version it replaced.
+    event["severity_scale"] = round(severity_scale, 4)
 
     if fault_type == "string_loss":
         if not unit_count or unit_count < 2:
@@ -385,6 +397,13 @@ def choose_events(frames, assumptions, seed, count):
     # while the comment promised a third of the way in, shortening the clean
     # baseline a detector needs. max(1, ...) keeps randrange non-empty on a short
     # window; a window under ~4 days cannot carry a meaningful injection anyway.
+    # A real guard. `max(1, ...)` kept randrange non-empty but still indexed past
+    # the end on a one-date window — an IndexError instead of a stated error.
+    if len(dates) < 4:
+        raise ValueError(
+            "the series has {} date(s); an injection needs a clean baseline before it and "
+            "days after it to be detectable. Re-run fetch_pvdaq.py.".format(len(dates)))
+
     earliest = max(1, len(dates) // 3)
     latest = max(earliest + 1, (len(dates) * 2) // 3)
 
@@ -421,18 +440,56 @@ def choose_events(frames, assumptions, seed, count):
     # type visits different rungs.
     offset = generator.randrange(3)
 
+    # Exactly one unit-level injection per run, at the LOWEST rung among the
+    # chosen sites that has inverter rows at all. Gating on `severity <= 0.12`
+    # instead produced a unit-level event in only 24 of 200 seeds — and none at
+    # the documented default — so the Screen 2 sub-site view it exists to feed
+    # had nothing, and the test guarding it passed vacuously.
+    def type_for(position, site_id, units):
+        slot = (position + offset) % 3
+        if slot == 1:
+            return "soiling_ramp"
+        if slot == 2 and units >= 2:
+            return "string_loss"
+        return "step_drop"
+
+    unit_counts = {site_id: int(hardware["unit_count"].get(site_id, 1)) for site_id in chosen}
+    eligible_for_unit = [
+        (position, site_id) for position, site_id in enumerate(chosen)
+        # position > 0 excludes the TOP rung. A unit drop of m costs the site
+        # about m/N, so recording rung 0.35 for one would mislabel the ladder's
+        # most important point by 2-7x. If the only site with inverters sits at
+        # position 0, this run simply has no unit-level event — better than a
+        # mislabelled one.
+        if position > 0
+        and type_for(position, site_id, unit_counts[site_id]) == "step_drop"
+        and bool((frames["inverter"]["site_id"] == site_id).any())
+    ]
+    # The LOWEST rung among eligible sites — the site's fault must be a
+    # step_drop AND the site must have inverter rows, so this is decided after
+    # types are known rather than hoped for.
+    #
+    # It still cannot be guaranteed: only THREE analysable sites have inverter
+    # rows at all (S-1199, S-1203, S-1278), so whether a run produces a
+    # unit-level event depends on which sites the seed picks and which type they
+    # land on. Measured at ~38% of seeds. For a guaranteed one, ask directly:
+    #   --site S-1203 --type step_drop --unit inv1 --from 2019-05-01
+    unit_level_site = eligible_for_unit[-1][1] if eligible_for_unit else None
+
+    # WITHOUT REPLACEMENT. Independent draws collide about 7% of the time with
+    # 4 events over ~78 candidate dates, so the distinctness the test asserts was
+    # never enforced — and the module docstring tells you to re-run at other
+    # seeds, straight into a red suite.
+    span = list(range(earliest, latest))
+    if len(span) < len(chosen):
+        span = list(range(0, max(1, len(dates))))
+    start_indices = generator.sample(span, min(len(chosen), len(span)))
+
     events = []
     for index, site_id in enumerate(chosen):
         units = int(hardware["unit_count"].get(site_id, 1))
         severity = ladder[index % len(ladder)]
-        slot = (index + offset) % 3
-
-        if slot == 1:
-            fault_type = "soiling_ramp"
-        elif slot == 2 and units >= 2:
-            fault_type = "string_loss"
-        else:
-            fault_type = "step_drop"
+        fault_type = type_for(index, site_id, units)
 
         # A unit-level step_drop gives the Screen 2 sub-site view something real.
         # string_loss is site-level by definition — see factor_for_day.
@@ -443,7 +500,7 @@ def choose_events(frames, assumptions, seed, count):
         # by 2-7x. Unit-level faults now take the lowest rungs, where being a
         # fraction of the site is the intent rather than an error.
         unit_id = None
-        if fault_type == "step_drop" and severity <= 0.12:
+        if fault_type == "step_drop" and site_id == unit_level_site:
             site_units = sorted(
                 frames["inverter"].loc[frames["inverter"]["site_id"] == site_id, "inverter_id"].unique())
             if site_units:
@@ -452,7 +509,7 @@ def choose_events(frames, assumptions, seed, count):
         events.append(build_event(
             site_id=site_id,
             fault_type=fault_type,
-            injected_from=dates[generator.randrange(earliest, latest)],
+            injected_from=dates[start_indices[index % len(start_indices)]],
             magnitude=severity,
             assumptions=assumptions,
             unit_id=unit_id,
