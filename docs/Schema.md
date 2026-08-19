@@ -641,7 +641,7 @@ in a judged repo beside real measurements; a seed regenerates it.
   "events": [
     {
       "site_id": "S-1199", "unit_id": null, "fault_type": "string_loss",
-      "injected_from": "2019-03-19", "injected_until": null,
+      "injected_from": "2019-03-02", "injected_until": null,
       "magnitude_pct": 0.142857, "unit_count": 7,
       "kwh_removed": 5298.3, "days_affected": 153,
       "note": "SYNTHETIC — injected into real PVDAQ data. Not a real fault."
@@ -649,6 +649,23 @@ in a judged repo beside real measurements; a seed regenerates it.
   ]
 }
 ```
+
+**Start dates are staggered**, drawn from the seed across the middle third of the
+window. They are not a fixed offset — every fault sharing one date is a tell a
+detector can learn without detecting anything.
+
+`soiling_ramp` events additionally carry **`base_rate_per_day`** (the sourced
+Malaysian figure) and **`severity_scale`** (its ladder position). `rate_per_day`
+is exactly `base_rate_per_day × severity_scale` as recorded — the scale is
+rounded first and the rate derived from it, so the label file passes its own
+arithmetic. `magnitude_pct` is `null` for a ramp: the loss depends on how long it
+has run.
+
+**`unit_count` is present on every event at a site with inverters**, not only
+`string_loss`. A unit-level fault of magnitude *m* costs the site roughly *m/N*,
+so a consumer cannot convert the label to a site-level severity without N. Such
+faults are placed at the ladder's **low** rungs, where being a fraction of the
+site is the intent rather than a mislabelling.
 
 **Dates here are SOURCE dates (2019).** `generate_dispatch.py` applies the §9
 remap when it emits the per-site block, so the remap stays in exactly one place.
