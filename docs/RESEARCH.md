@@ -97,7 +97,7 @@ Sources: [Impact of Soiling Rate on Solar PV Panel in Malaysia](https://www.rese
 | Total installed solar PV | **5,777.73 MW** cumulative (LSS + FiT + NEM), as of 2025 | IEA-PVPS / Energy Commission | T1 |
 | Rooftop solar | **1.72 GW as of July 2025 = ~40% of total installed *solar* capacity** | [TransitionZero](https://www.transitionzero.org/insights/tenaga-trends-how-were-monitoring-malaysias-evolving-rooftop-solar-landscape) | T1 — ⚠️ denominator is *solar* capacity, not all national capacity |
 | Solar ATAP | Live **1 Jan 2026**; fixed quota removed, government retains reserve authority to impose limits for grid stability | SEDA / SolarQuarter | T1 |
-| Electricity tariff structure | **RP4 in force 1 Jul 2025 → 31 Dec 2027**: energy + capacity + network + retail charges, plus **AFA** (replaced ICPT; 3.59 sen/kWh in July 2026). Non-domestic categorised by supply voltage (LV/MV/HV) | [myTNB](https://www.mytnb.com.my/business/understand-your-bill/pricing-tariff) | **T1** — Module 4 must model this, not a flat rate |
+| Electricity tariff structure | **RP4 in force 1 Jul 2025 → 31 Dec 2027**: energy + capacity + network + retail charges, plus **AFA**, which replaced ICPT. Non-domestic categorised by supply voltage (LV/MV/HV). **Base tariff 45.40 sen/kWh**, set by the regulator | [Suruhanjaya Tenaga](https://www.st.gov.my/jadual-elektrik-baharu-lebih-236-juta-pengguna-domestik-semenanjung-nikmati-kadar-lebih-adil) · [myTNB](https://www.mytnb.com.my/business/understand-your-bill/pricing-tariff) | **T1** — base rate is regulator-published. See §4.1 for why the AFA half is not |
 | IEA-PVPS Malaysia national statistics | Annual National Survey Reports: [2019](https://iea-pvps.org/wp-content/uploads/2020/08/NSR_Malaysia_2019.pdf) (390.51 MWac added in 2019), [2018](https://iea-pvps.org/wp-content/uploads/2020/01/NSR_Malaysia_2018.pdf), [2017](https://iea-pvps.org/wp-content/uploads/2020/01/National_Survey_Report_of_PV_Power_Applications_in_Malaysia-_2017.pdf), [2015](https://iea-pvps.org/wp-content/uploads/2020/01/National_Survey_Report_of_PV_Power_Applications_in_Malaysia_-_2015.pdf) | IEA-PVPS | T1 |
 
 ### The companies that hold the data
@@ -118,6 +118,55 @@ Sources: [Mordor Intelligence — Malaysia RE companies](https://www.mordorintel
 [SERIS PV System Performance Monitoring](https://www.seris.nus.edu.sg/services/pv-system-performance-monitoring/)
 
 ---
+
+### 4.1 The AFA is monthly and signed — do not fold it into a flat rate ⚠️
+
+**RP4 base tariff: 45.40 sen/kWh, Tier 1.** Set by Suruhanjaya Tenaga for 1 Jul 2025 → 31 Dec 2027,
+revised down from the 45.62 sen approved in Dec 2024.
+[ST announcement](https://www.st.gov.my/jadual-elektrik-baharu-lebih-236-juta-pengguna-domestik-semenanjung-nikmati-kadar-lebih-adil)
+
+**The Automatic Fuel Adjustment is not a tariff component.** It replaced ICPT on 1 Jul 2025, and
+where ICPT moved every six months, **ST recalculates the AFA every month** from fuel prices and FX.
+It is signed, and it has been **negative in 9 of the 14 months** of RP4 so far.
+
+| Month | AFA | Effective | | Month | AFA | Effective |
+|---|---:|---:|---|---|---:|---:|
+| Jul 2025 | 0.00 | 45.40 | | Feb 2026 | −2.77 | 42.63 |
+| Aug 2025 | −1.45 | 43.95 | | Mar 2026 | −2.15 | 43.25 |
+| Sep 2025 | −1.10 | 44.30 | | Apr 2026 | −0.47 | 44.93 |
+| Oct 2025 | −6.50 | 38.90 | | May 2026 | +1.38 | 46.78 |
+| **Nov 2025** | **−8.91** | **36.49** | | Jun 2026 | +2.59 | 47.99 |
+| Dec 2025 | −6.42 | 38.98 | | Jul 2026 | +3.59 | 48.99 |
+| Jan 2026 | −4.99 | 40.41 | | **Aug 2026** | **+3.80** | **49.20** |
+
+**Range −8.91 to +3.80 sen/kWh. Mean −1.67.** All sen/kWh.
+
+The AFA is capped at ±3 sen/kWh without cabinet approval, which is why Nov 2025's −8.91 required
+one. Green Energy Tariff subscribers are exempt from it entirely — a real route for a C&I owner to
+remove this variable, and worth a line in the pitch.
+
+**What this corrects.** An earlier `assumptions.json` used *45.40 + 3.59 = 48.99 sen* as a flat rate.
+That 3.59 is **July 2026's** AFA specifically — a single month frozen as if it were structural, and
+near the top of the observed range. It overstated the 14-month mean by **12%**, and every RM figure
+on the dashboard inherited that. Overstating the tariff overstates the value proposition, which is
+the direction that costs credibility.
+
+`config/assumptions.json` now carries the period mean, **RM 0.4373**, with the range set to the
+observed AFA extremes: **RM 0.3649 – 0.4920**. Every endpoint is a rate ST actually published.
+
+**Still not established:** the *non-domestic* rate structure by supply voltage. 45.40 sen is the
+**average base tariff**, and a Medium Voltage C&I customer pays energy + capacity + network + retail
+components that do not simply sum to it. Reported figures such as 54.43 sen/kWh appear in coverage of
+the domestic >1,500 kWh band and must not be reused for C&I without the gazetted MV schedule. Until
+that is sourced, treat the fleet-wide rate as an average, not as a bill any specific site would
+receive.
+
+Sources: [ST](https://www.st.gov.my/jadual-elektrik-baharu-lebih-236-juta-pengguna-domestik-semenanjung-nikmati-kadar-lebih-adil) ·
+[AFA Aug 2026 +3.80](https://paultan.org/2026/08/01/tnb-afa-rate-august-2026-set-at-3-80-sen-kwh/) ·
+[AFA Jul 2026 +3.59](https://paultan.org/2026/07/01/st-sets-tnb-afa-for-july-2026-set-at-3-59-sen-kwh/) ·
+[AFA Jun 2026 +2.59, with the full monthly series](https://paultan.org/2026/06/02/afa-rate-for-june-2026-set-at-2-59-sen-kwh/) ·
+[ICPT → AFA](https://www.businesstoday.com.my/2025/06/23/icpt-replaced-with-automatic-fuel-adjustment-mechanism-for-tnbs-future-tariff-measurement/)
+
 
 ## 5. What is *not* available — state this plainly, don't let a judge find it
 
