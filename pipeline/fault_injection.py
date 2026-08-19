@@ -14,6 +14,16 @@ detector stops seeing it, and publish where that happens. A recall curve that
 decays to zero at low severity is evidence of an honest test; a flat 100% is
 evidence of a rigged one. See docs/ARCHITECTURE.md section 5.
 
+HOW DEEP A LADDER THIS FLEET CAN HOLD. Not deep, in one run. With 11 sites in
+2 cohorts, the constraints below (never more than half a cohort, always leave
+controls) allow at most FOUR injections at a time. Build a real recall curve by
+pooling several seeded runs, not by asking one run for more sites — it will cap
+silently otherwise, and it now says so when it does.
+
+Every fault type has to vary with its ladder position or the ladder is
+decorative. They vary differently, because they are not the same kind of
+quantity — see the comments in choose_events.
+
 WHAT THIS DOES NOT DO. It does not score anything. Precision, recall,
 days-to-detect and false-positive rate need a detector, and M3 belongs to owner
 A. This produces the answer key, not the marking.
@@ -248,7 +258,7 @@ def apply_event(frames, event):
 
 
 def build_event(site_id, fault_type, injected_from, magnitude, assumptions,
-                injected_until=None, unit_id=None, unit_count=None):
+                injected_until=None, unit_id=None, unit_count=None, severity_scale=1.0):
     """One ground-truth record. Carries everything --verify needs to reverse it."""
     if fault_type not in FAULT_TYPES:
         raise ValueError("fault_type must be one of {}".format(FAULT_TYPES))
@@ -264,10 +274,19 @@ def build_event(site_id, fault_type, injected_from, magnitude, assumptions,
     }
 
     if fault_type == "soiling_ramp":
-        event["rate_per_day"] = assumptions["soiling_rate_per_day"]
+        # The ladder scales the RATE, not a fixed loss. A slower ramp is a harder
+        # detection, which is exactly what the low end of the ladder is probing.
+        #
+        # This previously discarded severity_scale entirely, so every soiling
+        # event was identical regardless of its ladder position and a third of
+        # the ladder was decorative.
+        base_rate = assumptions["soiling_rate_per_day"]
+        event["rate_per_day"] = round(base_rate * severity_scale, 6)
+        event["base_rate_per_day"] = base_rate
+        event["severity_scale"] = round(severity_scale, 4)
         event["max_loss_fraction"] = assumptions["soiling_max_loss_fraction"]
-        # magnitude_pct is the loss actually reached, for readability. The factor
-        # is computed from rate and floor, never from this.
+        # magnitude_pct is meaningless for a ramp — the loss depends on how long
+        # it has been running. The factor comes from rate and floor, never this.
         event["magnitude_pct"] = None
 
     if fault_type == "string_loss":
@@ -343,17 +362,53 @@ def choose_events(frames, assumptions, seed, count):
         per_cohort[cohort] = per_cohort.get(cohort, 0) + 1
 
     dates = sorted(fleet["date"].astype(str).unique())
-    # Start each fault a third of the way in, so there is a clean baseline before
-    # it and enough days after for a detector to have a chance.
-    start_date = dates[len(dates) // 3]
 
-    # The ladder itself: descending magnitude, so the recall curve has a real
-    # failure region rather than a wall of easy cases.
+    # STAGGERED START DATES. Every fault sharing one start date is a tell: a
+    # detector that learns "something happened on 19 March" scores well without
+    # detecting anything, and days-to-detect measured from a single common point
+    # flatters it. Real faults do not synchronise.
+    #
+    # Each start is drawn from the middle third of the window, leaving a clean
+    # baseline before it and enough days after for a detector to have a chance.
+    earliest = len(dates) // 4
+    latest = len(dates) // 2
+
+    # THE SEVERITY LADDER. Descending, so the recall curve has a genuine failure
+    # region rather than a wall of easy cases — publishing where the detector
+    # stops working is the answer to "you found faults you invented"
+    # (docs/ARCHITECTURE.md section 5).
     ladder = [0.35, 0.25, 0.18, 0.12, 0.08, 0.05]
+
+    # Each fault type has to ACTUALLY vary with its ladder position, or the
+    # ladder is decorative. How each one varies differs, because the three are
+    # not the same kind of quantity:
+    #
+    #   step_drop     the magnitude IS the loss. Ladder applies directly.
+    #   soiling_ramp  the magnitude scales the accumulation RATE. The base rate
+    #                 is the sourced Malaysian figure; the ladder probes how
+    #                 slow an onset the detector can still see.
+    #   string_loss   1/N, fixed by how many inverters a site has. It cannot be
+    #                 laddered without inventing a partial unit dropout, which
+    #                 would undo the site-level semantics. Instead it varies
+    #                 NATURALLY across sites: 7 units gives 14.3%, 2 gives 50%.
+    #                 Honest variation beats a fabricated one.
+    reference_severity = ladder[0]
+
+    if len(chosen) < count:
+        # Silent truncation would leave a thinner ladder than the caller asked
+        # for, and they would score against it without knowing.
+        print("  ! asked for {} injection sites, the constraints allow {}.".format(count, len(chosen)))
+        print("    An {}-site fleet in {} cohorts cannot hold a deep ladder in ONE run:".format(
+            len(set(frames["fleet"]["site_id"])), len(set(cohort_of.values()))))
+        print("    never more than half a cohort, and controls must remain.")
+        print("    For a full recall curve, run several seeds and pool the labels —")
+        print("    a curve built from 4 points is a line with pretensions.")
 
     events = []
     for index, site_id in enumerate(chosen):
-        units = hardware["unit_count"].get(site_id, 1)
+        units = int(hardware["unit_count"].get(site_id, 1))
+        severity = ladder[index % len(ladder)]
+
         if index % 3 == 1:
             fault_type = "soiling_ramp"
         elif index % 3 == 2 and units >= 2:
@@ -361,9 +416,8 @@ def choose_events(frames, assumptions, seed, count):
         else:
             fault_type = "step_drop"
 
-        # string_loss is site-level by definition (see factor_for_day). A
-        # unit-level entry goes in the ladder as a step_drop on one inverter, so
-        # the Screen 2 sub-site view has something real to show.
+        # A unit-level step_drop gives the Screen 2 sub-site view something real.
+        # string_loss is site-level by definition — see factor_for_day.
         unit_id = None
         if fault_type == "step_drop":
             site_units = sorted(
@@ -374,11 +428,12 @@ def choose_events(frames, assumptions, seed, count):
         events.append(build_event(
             site_id=site_id,
             fault_type=fault_type,
-            injected_from=start_date,
-            magnitude=ladder[index % len(ladder)],
+            injected_from=dates[generator.randrange(earliest, latest)],
+            magnitude=severity,
             assumptions=assumptions,
             unit_id=unit_id,
-            unit_count=int(units),
+            unit_count=units,
+            severity_scale=severity / reference_severity,
         ))
     return events
 

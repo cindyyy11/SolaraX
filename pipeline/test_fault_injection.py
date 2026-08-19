@@ -228,6 +228,48 @@ class TestAgainstRealData(unittest.TestCase):
             self.assertLessEqual(count, max(1, members // 2),
                                  "cohort {} has {} of {} injected".format(cohort, count, members))
 
+    def test_ladder_start_dates_are_staggered(self):
+        """Every fault sharing one start date is a tell: a detector that learns
+        "something happened on 19 March" scores well without detecting
+        anything, and days-to-detect from one common point flatters it."""
+        frames = self.frames()
+        events = fault_injection.choose_events(frames, fault_injection.load_assumptions(),
+                                               seed=42, count=4)
+        starts = {event["injected_from"] for event in events}
+        self.assertGreater(len(starts), 1, "all faults start on the same date")
+
+    def test_soiling_rate_scales_with_ladder_position(self):
+        """It previously discarded severity_scale, so every soiling event was
+        identical regardless of ladder position — a third of the ladder was
+        decorative. A slower ramp is a harder detection, which is the point."""
+        assumptions = fault_injection.load_assumptions()
+        base = assumptions["soiling_rate_per_day"]
+        severe = fault_injection.build_event(
+            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, severity_scale=1.0)
+        mild = fault_injection.build_event(
+            site_id="S-0001", fault_type="soiling_ramp", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, severity_scale=0.25)
+        self.assertAlmostEqual(severe["rate_per_day"], base, places=6)
+        self.assertLess(mild["rate_per_day"], severe["rate_per_day"])
+        # A milder ramp must actually be harder to see at a fixed horizon.
+        self.assertGreater(fault_injection.factor_for_day(mild, 60),
+                           fault_injection.factor_for_day(severe, 60))
+
+    def test_string_loss_varies_by_site_rather_than_being_faked(self):
+        """1/N is fixed by hardware, so it cannot be laddered without inventing
+        a partial unit dropout — which would undo the site-level semantics.
+        Honest variation across sites beats a fabricated one."""
+        assumptions = fault_injection.load_assumptions()
+        seven = fault_injection.build_event(
+            site_id="S-1199", fault_type="string_loss", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, unit_count=7)
+        two = fault_injection.build_event(
+            site_id="S-1203", fault_type="string_loss", injected_from="2019-03-01",
+            magnitude=None, assumptions=assumptions, unit_count=2)
+        self.assertAlmostEqual(seven["magnitude_pct"], 1 / 7, places=5)
+        self.assertAlmostEqual(two["magnitude_pct"], 0.5, places=5)
+
     def test_ladder_never_targets_an_already_excluded_site(self):
         """S-1367 sits below the plausibility floor, so it is not in the
         analysis. A label there could never be matched by anything."""
