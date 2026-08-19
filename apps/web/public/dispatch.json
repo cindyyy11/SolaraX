@@ -1,7 +1,7 @@
 {
   "meta": {
     "schema_version": "1.5.0",
-    "generated_at": "2026-08-18T16:36:25Z",
+    "generated_at": "2026-08-18T16:46:45Z",
     "pipeline_version": "0.4.0-placeholder",
     "reporting_month": "2026-08",
     "reporting_month_label": "August 2026",
@@ -62,13 +62,13 @@
     }
   },
   "fleet_summary": {
-    "site_count": 13,
-    "total_capacity_mwp": 2.88,
+    "site_count": 11,
+    "total_capacity_mwp": 1.32,
     "dispatch_count": 2,
     "monitor_count": 2,
-    "healthy_count": 9,
-    "visits_avoided": 11,
-    "trips_avoided": 5,
+    "healthy_count": 7,
+    "visits_avoided": 9,
+    "trips_avoided": 4,
     "trips_recommended": 2,
     "trip_groups": [
       {
@@ -129,27 +129,17 @@
         ],
         "site_count": 1,
         "dispatched": false
-      },
-      {
-        "trip_id": "T-07",
-        "label": "Golden, CO",
-        "site_ids": [
-          "S-1332",
-          "S-1283"
-        ],
-        "site_count": 2,
-        "dispatched": false
       }
     ],
-    "estimated_saving_rm": 7500,
+    "estimated_saving_rm": 6000,
     "total_rm_at_risk": 3399.04,
-    "cohort_count": 3
+    "cohort_count": 2
   },
   "roi": {
     "data_status": "PLACEHOLDER",
     "period_months": 1,
     "visits_recommended_total": 2,
-    "visits_avoided_total": 5,
+    "visits_avoided_total": 4,
     "faults_confirmed": 0,
     "faults_confirmed_basis": "No confirmation mechanism exists. Screen 3 stores technician findings in browser localStorage with no backend, so nothing can be counted as confirmed. This stays 0 until findings are persisted — it is not a measurement of zero faults.",
     "generation_recovered_kwh": 7772.8,
@@ -161,7 +151,7 @@
     "projection": {
       "horizon_months": 12,
       "factor": 12.0,
-      "saving_rm": 90000.0,
+      "saving_rm": 72000.0,
       "basis": "Straight-line projection of a single observed month over 12 months. Assumes this month is representative, which one month of data cannot establish. Shown as a projection so it is never mistaken for observed history."
     }
   },
@@ -191,29 +181,6 @@
       "centroid": {
         "lat": 39.6543,
         "lon": -75.7982
-      },
-      "cohort_median_performance_index": 3.8,
-      "data_status": "PLACEHOLDER"
-    },
-    {
-      "cohort_id": "GOLDEN-01",
-      "label": "Golden, CO cluster",
-      "member_site_ids": [
-        "S-1332",
-        "S-1283"
-      ],
-      "member_count": 2,
-      "analysed_site_ids": [
-        "S-1332",
-        "S-1283"
-      ],
-      "analysed_count": 2,
-      "excluded_site_ids": [],
-      "meets_minimum": false,
-      "clustering_method": "PLACEHOLDER — cohort_id read from config/fleet_sites.csv, to be replaced by M3 (owner A)",
-      "centroid": {
-        "lat": 39.7399,
-        "lon": -105.1721
       },
       "cohort_median_performance_index": 3.8,
       "data_status": "PLACEHOLDER"
@@ -19817,44 +19784,6 @@
       "cohort_id": "VEGAS-01",
       "tariff_rm_per_kwh": 0.4373,
       "source_system_id": "pvdaq_1277",
-      "status": "healthy",
-      "rank": null,
-      "data_status": "PLACEHOLDER",
-      "excluded_from_analysis": null,
-      "detection": null,
-      "divergence": null,
-      "economics": null,
-      "hypothesis": null
-    },
-    {
-      "site_id": "S-1332",
-      "name": "NREL Parking Garage",
-      "address": "Golden, CO",
-      "capacity_kwp": 1153.488,
-      "lat": 39.7388,
-      "lon": -105.1732,
-      "cohort_id": "GOLDEN-01",
-      "tariff_rm_per_kwh": 0.4373,
-      "source_system_id": "pvdaq_1332",
-      "status": "healthy",
-      "rank": null,
-      "data_status": "PLACEHOLDER",
-      "excluded_from_analysis": null,
-      "detection": null,
-      "divergence": null,
-      "economics": null,
-      "hypothesis": null
-    },
-    {
-      "site_id": "S-1283",
-      "name": "NREL Research Support Facility II",
-      "address": "Golden, CO",
-      "capacity_kwp": 408.24,
-      "lat": 39.7409,
-      "lon": -105.1711,
-      "cohort_id": "GOLDEN-01",
-      "tariff_rm_per_kwh": 0.4373,
-      "source_system_id": "pvdaq_1283",
       "status": "healthy",
       "rank": null,
       "data_status": "PLACEHOLDER",

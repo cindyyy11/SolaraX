@@ -10,5 +10,3 @@ source_system_id,name,site_location,lat,lon,capacity_kwp,kg_climate,mount_type,f
 35,Andre Agassi Preparatory Academy - Gymnasium,"Las Vegas, NV",36.1952,-115.1582,121.68,Bwh,roof,8/23/2010 7:49,7/26/2020 15:45,pass,VEGAS-01
 1276,Andre Agassi Preparatory Academy - Building B,"Las Vegas, NV",36.1952,-115.1582,68.48,Bwh,roof,8/30/2011 23:00,7/26/2020 16:00,pass,VEGAS-01
 1277,Andre Agassi Preparatory Academy - Building C,"Las Vegas, NV",36.1952,-115.1582,40.56,Bwh,roof,8/30/2011 23:00,7/26/2020 16:00,pass,VEGAS-01
-1332,NREL Parking Garage,"Golden, CO",39.7388,-105.1732,1153.488,BSk,roof,3/29/2013 12:01,5/7/2024 14:30,pass,GOLDEN-01
-1283,NREL Research Support Facility II,"Golden, CO",39.7409,-105.1711,408.24,BSk,roof,2/19/1997 3:15,5/7/2024 14:45,pass,GOLDEN-01
