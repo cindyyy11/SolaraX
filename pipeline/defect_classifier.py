@@ -3,6 +3,7 @@ from ultralytics import YOLO
 # Load the trained model once
 model = YOLO("model/best.pt")
 
+CONFIDENCE_THRESHOLD = 0.65
 
 def classify_defect(image_path):
     """
@@ -34,6 +35,12 @@ def classify_defect(image_path):
     # Get confidence score.
     confidence = float(result.probs.top1conf)
 
+    # Reject predictions the model is not confident enough about.
+    if confidence < CONFIDENCE_THRESHOLD:
+        return {
+            "class": "Unknown",
+            "confidence": confidence,
+        }
     # Return structured information.
     return {
         "class": class_name,

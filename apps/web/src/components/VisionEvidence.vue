@@ -92,34 +92,51 @@ async function analyseImage() {
       {{ error }}
     </p>
 
-    <div
+   <div
   v-if="prediction"
   class="vision__result"
 >
-  <p>
-    <strong>Predicted class:</strong>
-    {{ prediction.evidence.defect_class }}
-  </p>
+  <template v-if="prediction.evidence.defect_class === 'Unknown'">
+    <p>
+      <strong>Unable to classify image.</strong>
+    </p>
 
-  <p>
-    <strong>Confidence:</strong>
-    {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
-  </p>
+    <p>
+      Please upload a thermal solar-module image.
+    </p>
 
-  <p>
-    <strong>Model:</strong>
-    {{ prediction.evidence.model_note }}
-  </p>
+    <p>
+      <strong>Model confidence:</strong>
+      {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
+    </p>
+  </template>
 
-  <p>
-    <strong>Inference mode:</strong>
-    {{ prediction.evidence.inference_mode }}
-  </p>
+  <template v-else>
+    <p>
+      <strong>Predicted class:</strong>
+      {{ prediction.evidence.defect_class }}
+    </p>
 
-  <p>
-    <strong>Data status:</strong>
-    {{ prediction.evidence.data_status }}
-  </p>
+    <p>
+      <strong>Confidence:</strong>
+      {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
+    </p>
+
+    <p>
+      <strong>Model:</strong>
+      {{ prediction.evidence.model_note }}
+    </p>
+
+    <p>
+      <strong>Inference mode:</strong>
+      {{ prediction.evidence.inference_mode }}
+    </p>
+
+    <p>
+      <strong>Data status:</strong>
+      {{ prediction.evidence.data_status }}
+    </p>
+  </template>
 </div>
   </section>
 </template>
