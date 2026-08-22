@@ -139,3 +139,38 @@ export function formatRinggit(value: number): string {
 export function formatCapacity(kwp: number): string {
   return `${kwp.toLocaleString('en-MY', { maximumFractionDigits: 0 })} kWp`
 }
+
+//cv
+export interface VisionPrediction {
+  class: string
+  confidence: number
+}
+
+const VISION_API_URL =
+  import.meta.env.VITE_VISION_API_URL ?? 'http://127.0.0.1:8000'
+
+export async function predictVision(
+  image: File,
+): Promise<VisionPrediction> {
+  const formData = new FormData()
+
+  // Must be called "image" because FastAPI expects:
+  // image: UploadFile = File(...)
+  formData.append('image', image)
+
+  const response = await fetch(
+    `${VISION_API_URL}/vision/predict`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Vision prediction failed: ${response.status}`,
+    )
+  }
+
+  return (await response.json()) as VisionPrediction
+}
