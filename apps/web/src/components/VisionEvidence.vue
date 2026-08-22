@@ -93,19 +93,34 @@ async function analyseImage() {
     </p>
 
     <div
-      v-if="prediction"
-      class="vision__result"
-    >
-      <p>
-        <strong>Predicted class:</strong>
-        {{ prediction.class }}
-      </p>
+  v-if="prediction"
+  class="vision__result"
+>
+  <p>
+    <strong>Predicted class:</strong>
+    {{ prediction.evidence.defect_class }}
+  </p>
 
-      <p>
-        <strong>Confidence:</strong>
-        {{ (prediction.confidence * 100).toFixed(2) }}%
-      </p>
-    </div>
+  <p>
+    <strong>Confidence:</strong>
+    {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
+  </p>
+
+  <p>
+    <strong>Model:</strong>
+    {{ prediction.evidence.model_note }}
+  </p>
+
+  <p>
+    <strong>Inference mode:</strong>
+    {{ prediction.evidence.inference_mode }}
+  </p>
+
+  <p>
+    <strong>Data status:</strong>
+    {{ prediction.evidence.data_status }}
+  </p>
+</div>
   </section>
 </template>
 

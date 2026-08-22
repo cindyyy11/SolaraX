@@ -52,6 +52,12 @@ async def predict_defect(
     result = classify_defect(temp_path)
 
     return {
-        "class": result["class"],
+    "evidence": {
+        "has_imagery": True,
+        "defect_class": result["class"],
         "confidence": result["confidence"],
+        "model_note": "Fine-tuned YOLOv8n-cls on RaptorMaps infrared module crops",
+        "inference_mode": "interactive",
+        "data_status": "SIMULATED",
     }
+}

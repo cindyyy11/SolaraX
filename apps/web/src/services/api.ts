@@ -141,9 +141,17 @@ export function formatCapacity(kwp: number): string {
 }
 
 //cv
-export interface VisionPrediction {
-  class: string
+export interface VisionEvidencePayload {
+  has_imagery: boolean
+  defect_class: string
   confidence: number
+  model_note: string
+  inference_mode: string
+  data_status: string
+}
+
+export interface VisionPrediction {
+  evidence: VisionEvidencePayload
 }
 
 const VISION_API_URL =
