@@ -22,6 +22,7 @@ import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import CohortChart from '@/components/CohortChart.vue'
 import InverterPanel from '@/components/InverterPanel.vue'
 import InverterThermalMap from '@/components/InverterThermalMap.vue'
+import VisionEvidence from '@/components/VisionEvidence.vue' 
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -149,6 +150,12 @@ const cohort = computed(() => {
       <section v-if="site.sub_site?.has_thermal" class="block">
         <InverterThermalMap :sub-site="site.sub_site" :evidence="site.evidence" />
       </section>
+
+      <!-- Block 5 — CV evidence for flagged sites. -->
+      <section v-if="site.detection" class="block">
+        <VisionEvidence />
+      </section>
+
     </template>
   </main>
 </template>
