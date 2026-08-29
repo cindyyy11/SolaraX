@@ -1,7 +1,7 @@
 # TECHNICAL.md — how SolaraX is built
 
 > Engineering reference: stack, data strategy, module specs, and the technical weaknesses we have
-> answers for. Product spec lives in [`./PRD.md`](./PRD.md); dataset
+> answers for. Product spec lives in [`SolaraX_PRD_v2.md`](./SolaraX_PRD_v2.md); dataset
 > evidence in [`DATASETS.md`](./DATASETS.md); sourced claims in [`RESEARCH.md`](./RESEARCH.md).
 >
 > **Verified 15 Aug 2026.** Two entries below changed recently — re-check before Phase 2.

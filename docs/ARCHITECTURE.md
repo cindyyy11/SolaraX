@@ -2,7 +2,7 @@
 
 > **How SolaraX is built, module by module.** Decisions carry their rationale and the alternatives
 > rejected. Design rationale for the contested calls lives in
-> [`ARCHITECTURE-PLAN.md`](./ARCHITECTURE-PLAN.md); product intent in [`PRD.md`](./PRD.md); sourced
+> [`ARCHITECTURE-PLAN.md`](./ARCHITECTURE-PLAN.md); product intent in [`SolaraX_PRD_v2.md`](./SolaraX_PRD_v2.md); sourced
 > claims in [`RESEARCH.md`](./RESEARCH.md).
 >
 > **Version 1.0 — 16 Aug 2026.** Written against **verified** data (§1), not against documentation.
@@ -10,7 +10,34 @@
 
 **Labelling.** Every component is marked **BUILT** (runs on real data today) · **SIMULATED** (real
 method, synthetic input, labelled on screen) · **PLANNED** (designed, not yet implemented).
-As of 16 Aug 2026 the data layer is verified and every module is **PLANNED**.
+
+---
+
+## Implementation status — read this before the design sections
+
+> **This document was written on 16 Aug 2026, before any module existed.** It is the *design*
+> record, and it is deliberately preserved as one: the rationale and the rejected alternatives are
+> the part worth keeping. Where the shipped implementation differs from the design below, the
+> implementation wins and the section says so.
+
+| Module | 16 Aug design | As shipped, 30 Aug |
+|---|---|---|
+| M1 Fleet ingestion | PLANNED | ✅ **BUILT** — `pipeline/fetch_pvdaq.py` |
+| M2 Sensor-free baseline | PLANNED | ✅ **BUILT** — `pipeline/baseline.py`. **Design changed, see §3 M2** |
+| M3 Peer benchmarking ⭐ | PLANNED | ✅ **BUILT** — `pipeline/peer_benchmark.py`. **Design changed, see §3 M3** |
+| M4 Economic ranking | PLANNED | ✅ **BUILT** — loss input now measured, not assumed |
+| M5 Visual verification | PLANNED | 🟡 Classifier trained; no `evidence` block emitted yet |
+| M6 Dashboard | PLANNED | ✅ **BUILT** — four screens |
+| M7 API / hosted demo | PLANNED | ⬜ Deploy config committed, URL not yet live — [`../DEPLOY.md`](../DEPLOY.md) |
+| M8 Reproducibility | PLANNED | 🟡 108 tests + CI; demo video not started |
+
+**The as-built record for M2 and M3 is [`M2-M3-METHOD.md`](./M2-M3-METHOD.md)**, which carries the
+formulas actually implemented, the measured accuracy, and the limitations. Where this file and that
+one disagree, that one is current.
+
+The fleet also changed after this document was written: **GOLDEN-01 was dropped on 19 Aug** (its two
+NREL Golden systems had no rows in the processed data), so the fleet is **11 sites in 2 cohorts**,
+not the 8-site single-cohort Las Vegas fleet described in §1.4 below.
 
 ---
 
@@ -143,7 +170,7 @@ imagery attached only as evidence on sites the electrical signal already flagged
 
 ## 3. Modules
 
-### M1 — Fleet Ingestion · PLANNED
+### M1 — Fleet Ingestion · ✅ BUILT
 
 **Job.** Turn PVDAQ's per-system EAV Parquet into one canonical, `site_id`-keyed, daily table.
 
@@ -212,7 +239,15 @@ def daily_kwh(power_w: pd.Series) -> float:
 `FleetSource.daily(site_id, start, end)` returning the schema above. PVDAQ is one implementation;
 HKUST would be a second (~100 lines). *Rationale: keeps the HKUST gate (§7) a decision, not a rewrite.*
 
-### M2 — Sensor-Free Baseline · PLANNED
+### M2 — Sensor-Free Baseline · ✅ BUILT — but not as designed below
+
+> **The shipped M2 differs from this section and the difference matters.** The design here assumes
+> one irradiance provider chosen per run; the implementation fixes NASA POWER fleet-wide, because
+> the peer comparison's error-cancellation argument is false if cohort members use different
+> providers. It also adds the one thing this section does not name: a **single fleet-wide system
+> derate**, calibrated as the median of measured/modelled and never fitted per site — a per-site
+> derate absorbs the fault it is supposed to reveal. Formulas, constants and measured accuracy
+> (R² 0.9008, MAE 17.57 %) are in [`M2-M3-METHOD.md`](./M2-M3-METHOD.md).
 
 **Job.** Expected generation per site-day from satellite weather + system geometry. No pyranometer,
 ever — that is the wedge.
@@ -249,7 +284,18 @@ cell temperature, PVWatts DC. PRD v2 §13.1 requires one site-day to match a han
 **Free sanity check.** Malaysian systems publish **PR 56–87%**, healthy C&I 75–85%
 ([`RESEARCH.md`](./RESEARCH.md) §2). A baseline implying a Malaysian PR outside that band is wrong.
 
-### M3 — Fleet Peer Benchmarking ⭐ · PLANNED
+### M3 — Fleet Peer Benchmarking ⭐ · ✅ BUILT — but not as designed below
+
+> **Three things in this section were superseded by the implementation.**
+> **(1) Cohorts** are not greedy 55 km geographic clustering. Clustering on raw lat/lon is degenerate
+> on this fleet — five VEGAS roofs share byte-identical coordinates — so the shipped method is
+> **Köppen climate zone first, single-linkage great-circle distance second**, verified to reproduce
+> the configured fleet from coordinates alone.
+> **(2) The fleet** is 11 sites in 2 cohorts, not one Las Vegas cohort of 8.
+> **(3) The z-score threshold** is not the textbook −3.5. That value **missed a 35 % step drop** here,
+> because a 5-site cohort carrying 2 faults is 40 % contamination against MAD's 50 % breakdown point.
+> The operating point is calibrated on held-out seeds instead.
+> Measured: precision 86.7 %, recall 65.0 %. See [`M2-M3-METHOD.md`](./M2-M3-METHOD.md).
 
 **The differentiator.** Everything else is supporting work.
 
@@ -318,7 +364,7 @@ faults. Four layers, cheapest first:
 peer comparison sees nothing. M2's absolute baseline catches fleet-wide drift; M3 catches
 site-specific faults. That is why both exist.
 
-### M4 — Economic Ranking · PLANNED
+### M4 — Economic Ranking · ✅ BUILT
 
 kWh lost → **RM/month at risk** → a dispatch threshold. Every constant is named and sourced in
 `config/tariff_rp4.yaml` — nothing numeric is buried in code.
@@ -361,7 +407,7 @@ survive the worst corner of every assumption**, per PRD v2 §13.5.
 > ⚠️ The component split is a **secondary source**, not TNB primary — `ARCHITECTURE-PLAN.md` §1. It
 > is shipped as a labelled range for exactly that reason. The `base_total` and AFA figures are T1.
 
-### M5 — Visual Verification · PLANNED · SIMULATED output
+### M5 — Visual Verification · 🟡 PARTIAL · SIMULATED output
 
 YOLOv8 fine-tuned in Colab on the Roboflow thermal set (281 labelled frames), exported to ONNX and
 served through FastAPI. Returns `{defect_class, confidence, bbox}` attached to an **already-flagged**
@@ -372,7 +418,7 @@ Leading with this would invite comparison to Sitemark and Scopito on their stron
 `CLAUDE.md` names that as an anti-goal. Thermal imaging also cannot reliably detect microcracks;
 electroluminescence is the standard. We do not claim otherwise.
 
-### M6 — Dashboard · PLANNED
+### M6 — Dashboard · ✅ BUILT
 
 Vue 3 · Vite · ECharts · Leaflet, deployed to Vercel, public with no login. Four screens (PRD v2 §4).
 Screen 2's **cohort overlay** — seven lines tracking together and one diverging — is the single most
@@ -383,7 +429,7 @@ persuasive visual in the product and gets disproportionate polish.
 running M2 on **real satellite weather at real Malaysian coordinates** (`data/pvgis-bukit-raja-klang.json`,
 3.08°N 101.44°E). Malaysian site names over American generation data would be fabrication.
 
-### M7 — API · PLANNED
+### M7 — API · ⬜ PLANNED
 
 Supabase Postgres holds precomputed results; the frontend reads via PostgREST. Tables are designed as
 a contract so the shape survives a runtime change:
@@ -401,7 +447,7 @@ a contract so the shape survives a runtime change:
 > decision. **The nightly GitHub Action is therefore a single point of failure** and must include an
 > explicit keep-alive request, be green before the judging window, and be checked in early September.
 
-### M8 — Reproducibility · PLANNED
+### M8 — Reproducibility · 🟡 PARTIAL
 
 ```bash
 git clone … && cd SolaraX

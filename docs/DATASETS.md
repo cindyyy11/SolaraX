@@ -1,7 +1,15 @@
 # Dataset options for SolaraX — evidence and comparison
 
-> **Status: decision not yet made.** This file exists so the team can choose from evidence rather
-> than assumption. Compiled 15 Aug 2026.
+> **Status: decided — NREL PVDAQ.** ✅ *Closed 16 Aug 2026, refined 19 Aug.* This file is preserved
+> as the evidence the choice was made from, not as an open question. What shipped: **11 sites,
+> 1.32 MWp, 2 Köppen cohorts** (DSUN-01 in MD/DE/NJ, VEGAS-01 in NV), 1 Jan – 21 Aug 2019.
+> Irradiance is **NASA POWER**, fleet-wide and single-source — see
+> [`M2-M3-METHOD.md`](./M2-M3-METHOD.md).
+>
+> **§2.1's California cluster counts below are metadata-only and were wrong** — only 157 systems
+> carry downloadable time series, not 1,862. That correction is recorded in
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1.2 and is the reason the fleet is what it is.
+> Compiled 15 Aug 2026.
 >
 > Sources: my own analysis of NREL's live PVDAQ site metadata (`systems_20250729.csv`, 1,862 rows,
 > downloaded and analysed 15 Aug 2026), plus Table 4 of **Chen, Li, Braid et al., "Open data sets

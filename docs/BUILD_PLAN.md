@@ -1,6 +1,12 @@
 # SolaraX — Build Plan for Claude Code (v2)
 
-Read `CLAUDE.md` and `docs/SCHEMA.md` before starting any stage.
+> **Status, 30 Aug 2026.** Stages through M4 and the dashboard are complete; M2 and M3 shipped on
+> 30 Aug. This file is the *plan*, kept for its stage ordering and definitions of done — where it
+> describes placeholder values or a null `expected_kwh`, that describes the state it was written
+> against, not what runs now. Current status: [`../PROGRESS.md`](../PROGRESS.md). As-built detection
+> method: [`./M2-M3-METHOD.md`](./M2-M3-METHOD.md).
+
+Read `CLAUDE.md` and [`docs/Schema.md`](./Schema.md) before starting any stage.
 
 Work through these stages **in order**. Each has a definition of done. Stop at
 the end of each stage and report before starting the next — several stages

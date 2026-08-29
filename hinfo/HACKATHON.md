@@ -3,7 +3,7 @@
 > **What this file is.** The single, durable reference for everything about the *competition*
 > — rules, rubric, dates, deliverables, and what our team has actually submitted so far. It is
 > **direction-agnostic**: it stays true no matter how the product pivots. For the *product*, read
-> [`CLAUDE.md`](../CLAUDE.md) and [`docs/PRD.md`](../docs/PRD.md). For who decided what
+> [`CLAUDE.md`](../CLAUDE.md) and [`docs/SolaraX_PRD_v2.md`](../docs/SolaraX_PRD_v2.md). For who decided what
 > and when, read [`docs/DECISIONS.md`](../docs/DECISIONS.md).
 >
 > **Verification status.** Everything marked ✅ was re-checked against the live
@@ -144,9 +144,9 @@ Per the announcement these can be **added or updated any time before 1 September
 
 | Item | Official spec | Our status |
 |---|---|---|
-| **Product demo video** | MP4 or public URL, **max 3 minutes** | ⬜ Not started. Must show the real dashboard, not narrated slides |
-| **Artifact / architecture PDF** | GitHub repo, hosted demo, API endpoint, notebook, HuggingFace Space, **or** PDF upload. Must stay publicly accessible during judging. PDF **≤ 5 MB** | 🔴 Repo is 404 to the public, 1 commit, no code — see §6 |
-| **Team member profiles** | **LinkedIn / GitHub links for each member** | ⬜ Not started. WenHui's GitHub handle is still unknown |
+| **Product demo video** | MP4 or public URL, **max 3 minutes** | ⬜ Not started. Must show the real dashboard, not narrated slides. Blocked on the public URL — [`../DEPLOY.md`](../DEPLOY.md) |
+| **Artifact / architecture PDF** | GitHub repo, hosted demo, API endpoint, notebook, HuggingFace Space, **or** PDF upload. Must stay publicly accessible during judging. PDF **≤ 5 MB** | 🔴 **Repo is still 404 to the public** — see §6. The content is now there (full pipeline, 108 tests, measured accuracy); visibility is the only thing missing, and while it is private this counts as non-submission |
+| **Team member profiles** | **LinkedIn / GitHub links for each member** | ⬜ Not started. The fifth member's GitHub handle is `hui18Q` (from the M5 commit authorship); the recorded chat name and the commit name differ — **confirm the legal name before it goes on the form**, see [`../docs/DECISIONS.md`](../docs/DECISIONS.md) §1 |
 
 ### The AI disclosure form (Step 05) — three required parts
 

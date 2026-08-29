@@ -2,10 +2,15 @@
 
 > **What this file is.** The contested technical decisions, argued with rationale and rejected
 > alternatives, plus the build order. It is the input to [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-> (⬜ not yet written — the full module-by-module doc with code samples, schemas, the API contract
-> and the diagram, which also becomes the submission architecture PDF ≤5 MB).
+> (✅ **written 16 Aug** — the full module-by-module doc, which also becomes the submission
+> architecture PDF ≤5 MB).
 >
-> Product brief: [`./PRD.md`](./PRD.md) · Engineering reference:
+> **Status, 30 Aug 2026.** The build order below is complete through M4 and M6. M2 and M3 shipped,
+> and the shipped method differs from the sketch here in ways that are documented rather than
+> hidden — see [`M2-M3-METHOD.md`](./M2-M3-METHOD.md) for what actually runs, and
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) §Implementation status for the divergences.
+>
+> Product brief: [`SolaraX_PRD_v2.md`](./SolaraX_PRD_v2.md) · Engineering reference:
 > [`TECHNICAL.md`](./TECHNICAL.md) · Dataset evidence: [`DATASETS.md`](./DATASETS.md) ·
 > Sourced claims: [`RESEARCH.md`](./RESEARCH.md) · History: [`DECISIONS.md`](./DECISIONS.md)
 >
@@ -279,7 +284,7 @@ NFR and the BUILT/SIMULATED discipline. **PRD v2 §4 needs updating to match.**
 | 16–18 Aug | M1 ingestion + source adapter interface + canonical schema (frozen). M2 pvlib baseline. Hand-check M2 against one site-day |
 | 19–21 Aug | M3 cohorts + robust z-score + curtailment stack. M4 economic ranking with RP4 config. Fault-injection harness ✅. ~~**21 Aug: HKUST gate decision (§3.2)**~~ ✅ **Closed 19 Aug — ship PVDAQ.** See [`DECISIONS.md`](./DECISIONS.md) |
 | 22–24 Aug | Validation run → real precision/recall/days-to-detect. Supabase load + nightly GitHub Action green. Vue dashboard |
-| 25–26 Aug | Deck, summary, demo video, `ARCHITECTURE.md` → PDF. Red-team ([PRD v2 §13](./PRD.md)) |
+| 25–26 Aug | Deck, summary, demo video, `ARCHITECTURE.md` → PDF. Red-team ([PRD v2 §13](./SolaraX_PRD_v2.md)) |
 | 27–31 Aug | Buffer. No new features. **Confirm Supabase project is awake and the nightly action is green** |
 
 **Cut order if it slips:** HKUST → Module 5 image classifier → Screen 3 work order → Screen 4 ROI.
@@ -313,7 +318,7 @@ SolaraX/
 
 ## 6. Verification
 
-Maps to [PRD v2 §13](./PRD.md) acceptance criteria.
+Maps to [PRD v2 §13](./SolaraX_PRD_v2.md) acceptance criteria.
 
 1. `python run.py` from a clean checkout and clean venv runs M1→M4 and populates Supabase with real
    numbers — the one-command criterion.

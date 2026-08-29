@@ -349,10 +349,10 @@ frontend ignores changes nothing a judge sees.
     "member_site_ids": ["S-001", "S-002", "S-004", "S-007", "S-009", "S-011"],
     "member_count": 6,
     "meets_minimum": true,
-    "clustering_method": "PLACEHOLDER — lat/lon proximity, to be replaced by M3 (owner A)",
+    "clustering_method": "Koppen climate zone, then single-linkage agglomerative clustering on great-circle distance within the zone",
     "centroid": { "lat": 3.0733, "lon": 101.4489 },
     "cohort_median_performance_index": 3.61,
-    "data_status": "PLACEHOLDER"
+    "data_status": "BUILT"
   }
 ]
 ```
@@ -419,14 +419,14 @@ The main array. One object per site. Ordered by `rank` ascending, healthy sites 
 
 ```json
 "detection": {
-  "method": "PLACEHOLDER — cohort mean deviation, to be replaced by M3 (owner A)",
-  "score": -3.42,
-  "score_type": "cohort_mean_deviation",
-  "threshold": -2.0,
-  "confidence": 0.81,
+  "method": "Robust peer-deviation z-score: Iglewicz-Hoaglin modified z-score (median / MAD) across same-day cohort peers, on a performance ratio normalised to each site's own reference period",
+  "score": -1.72,
+  "score_type": "z_score",
+  "threshold": -0.5,
+  "confidence": 0.9,
   "cohort_size": 6,
   "cohort_meets_minimum": true,
-  "data_status": "PLACEHOLDER"
+  "data_status": "BUILT"
 }
 ```
 
@@ -436,7 +436,7 @@ The main array. One object per site. Ordered by `rank` ascending, healthy sites 
 | `score` | float | ✅ | Signed. Negative = underperforming |
 | `score_type` | enum §2.4 | ✅ | |
 | `threshold` | float | ✅ | What `score` was compared against. Without it the score is unreadable |
-| `confidence` | float 0–1 | ✅ | Frontend formats as % |
+| `confidence` | float 0–1 | ✅ | Frontend formats as %. **As implemented this is _persistence_** — the fraction of the evaluation window on which the site sat below its cohort. Chosen because it is the one number here a reader can restate in words and check against the chart above it: `0.90` means "below its peers on 27 of the last 30 days". See [`M2-M3-METHOD.md`](./M2-M3-METHOD.md) |
 | `cohort_size` | int | ✅ | |
 | `cohort_meets_minimum` | boolean | ✅ | Mirrors the cohort flag for convenience |
 | `data_status` | enum §2.1 | ✅ | |
@@ -525,8 +525,10 @@ Feeds Screen 2's explanation panel and Screen 3's work order.
 ```
 
 **`actual_vs_expected`** — one row per site per day, 90 days.
-`expected_kwh` comes from M2 (owner A) and is `null` until M2 lands; the frontend
-renders the actual line alone when it is null rather than breaking.
+`expected_kwh` comes from M2 and is populated as of 30 Aug 2026. It stays `null`
+on any day the baseline could not produce a value for; the frontend renders the
+actual line alone across that gap rather than breaking, and a gap is the truthful
+rendering of a day we could not predict.
 
 **`cohort`** — long format, one row per *peer* per day. This is the array behind
 the chart PRD §4 calls *"the visual that sells the whole product."*
@@ -749,5 +751,12 @@ stops scaffolding shipping to a judge.
 | 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Also documents `ground_truth.json`'s top-level shape and adds `assumptions.soiling_rate_per_day` / `soiling_max_loss_fraction` for `pipeline/fault_injection.py`. Additive only; no field renamed or removed (C) |
 | 1.6.0 | 19 Aug 2026 | `ground_truth.json` events gain `severity_scale` (every event) and `base_rate_per_day` (soiling); `unit_count` now on every event with inverters, not only `string_loss`; start dates staggered. `dispatch.json` unchanged — this bumps because the label file is a documented contract owner A loads against, and 1.4.0 set the precedent of a row for a purely additive field. Additive only (C) |
 
+| — | 30 Aug 2026 | **No version change.** M2 and M3 shipped and now populate `expected_kwh`, `detection`, `divergence`, `hypothesis`, `cohorts[].clustering_method` and `cohorts[].cohort_median_performance_index` — every one of which was already in this contract. **No field was added, renamed, retyped or removed, so the frontend needed no migration.** What changed here is prose and examples that had gone stale: the illustrative `detection` and `cohorts` blocks now show real shipped values instead of PLACEHOLDER strings, and `confidence` is documented as the persistence figure it is implemented as. `meta.pipeline_version` moved 0.4.0-placeholder → 0.5.0, which is the correct place to record that the *producer* changed while the *contract* did not (A) |
+
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.
+
+**A row with no version is legitimate and this table now has one.** When the
+values change but the contract does not, say so here rather than bumping — a
+version number that moves without a consumer-visible change trains everyone to
+ignore it.
