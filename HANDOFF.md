@@ -28,10 +28,14 @@ file that comes out still has the shape in [`docs/Schema.md`](./docs/Schema.md).
 ```bash
 pip install -r pipeline/requirements.txt
 
+python pipeline/fetch_irradiance.py      # NASA POWER cache — M2 needs it, ~30 s, run once
 python pipeline/generate_dispatch.py     # writes dispatch.json, publishes to the frontend
-python pipeline/validate_dispatch.py     # 17 rules; exits non-zero on failure
-python pipeline/test_validate_dispatch.py  # 28 tests on the validator itself
+python pipeline/validate_dispatch.py     # 19 rules; exits non-zero on failure
+python -m pytest pipeline/               # 105 tests across the whole pipeline
 ```
+
+`generate_dispatch.py` runs without the irradiance cache, but it then falls back to the PLACEHOLDER
+detector and stamps `meta.data_status` PLACEHOLDER. If you see that, you skipped step one.
 
 Frontend:
 
@@ -69,7 +73,7 @@ line:
 Two things must not change:
 
 1. **`write_dispatch_file()`** and the output path `pipeline/output/dispatch.json`
-2. **The shape of what it writes** — `docs/Schema.md`, currently **1.3.0**
+2. **The shape of what it writes** — `docs/Schema.md`, currently **1.6.0**
 
 Everything above that comment is scaffolding. Delete it freely.
 
@@ -80,17 +84,28 @@ modes that otherwise show up as a blank chart during a demo rather than an error
 
 ## What is PLACEHOLDER right now
 
-25 values. `validate_dispatch.py` lists them every run with a count.
+**One value.** `validate_dispatch.py` lists them every run with a count.
 
 | Where | What is fake | Owner |
 |---|---|---|
-| `sites[].detection` | `score`, `threshold`, `confidence`, `method` — the whole block | **A (M3)** |
-| `sites[].economics` | `kwh_lost_monthly` derives from a made-up loss fraction, not from a real shortfall | **A (M2)** + **C (M4)** |
-| `sites[].hypothesis` | The cause text is a fixed string, not derived from any signal | **A (M3)** |
-| `cohorts[].clustering_method` | Cohorts are read from `config/fleet_sites.csv`, not clustered | **A (M3)** |
-| `series.actual_vs_expected[].expected_kwh` | **Always `null` — deliberate, not a bug.** It is M2's output | **A (M2)** |
+| `roi.data_status` | The ROI block is labelled PLACEHOLDER. Its inputs are now measured, but `faults_confirmed` still has no confirmation mechanism — Screen 3 stores technician findings in browser localStorage with no backend | **C (M4)** |
 | `sites[].evidence` | Not emitted at all. The UI slot exists and renders an honest empty state | **B (M5)** |
-| Which sites are flagged | A hardcoded list of site ids in `PLACEHOLDER_DISPATCH_SITE_IDS` | **A (M3)** |
+
+`sites[].evidence` is absent rather than PLACEHOLDER, which is correct: the schema makes it optional
+and Screen 2 renders properly without it. It is listed here because it is still outstanding work, not
+because it is a fake value.
+
+**Cleared on 30 Aug** — all of these are now measured, so don't rebuild them:
+
+| Where | Now |
+|---|---|
+| `sites[].detection` | Robust peer-deviation z-score. `confidence` is persistence — "below its peers on 27 of the last 30 days" |
+| `sites[].economics` | `kwh_lost_monthly` is a measured peer-relative shortfall. M4's tariff and threshold arithmetic is untouched |
+| `sites[].hypothesis` | Cause follows the Theil-Sen slope of the post-divergence deviation: step vs progressive, with different checks |
+| `cohorts[].clustering_method` | Köppen zone then single-linkage great-circle clustering, verified to reproduce the configured fleet |
+| `cohorts[].cohort_median_performance_index` | Measured per cohort (DSUN-01 4.61, VEGAS-01 5.10), was one flat constant for both |
+| `series.actual_vs_expected[].expected_kwh` | M2's baseline. Populated on every row that has a measurement |
+| Which sites are flagged | The detector decides. `PLACEHOLDER_DISPATCH_SITE_IDS` survives only as the no-irradiance-cache fallback |
 
 **What is already real (`BUILT`)**, so don't rebuild it:
 
@@ -132,27 +147,31 @@ Two guards in the quality report exist because of these: nothing above
 
 ## For A — M2 and M3
 
-**M2.** Fill `series.actual_vs_expected[].expected_kwh`. It is `null` today and
-the frontend already renders the actual line alone without it, so you can land
-this incrementally.
+**Both shipped 30 Aug.** Method, formulas, measured accuracy and stated limitations:
+[`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md).
 
-**M3.** Replace `build_detection()`, `build_divergence()` and `classify_site()`.
-Set `score_type` to whichever of the enum values you actually use — the frontend
-prints the raw name.
+```
+pipeline/fetch_irradiance.py   NASA POWER hourly cache, 7 coordinates for 11 sites
+pipeline/baseline.py           M2 — pvlib chain + one fleet-wide derate
+pipeline/peer_benchmark.py     M3 — cohort clustering, z-score, divergence, shortfall
+pipeline/score_detector.py     accuracy against the injected ground truth
+config/model_params.json       every model constant, each with a sourcing note
+```
 
-Two things worth knowing before you start:
+They plug in through `generate_dispatch.run_analysis()`, which is the only place either module
+touches the artifact. If you are changing the method, change it in those files — `generate_dispatch`
+should not grow analysis logic.
 
-- **Cohort geometry varies a lot.** VEGAS-01's five Agassi sites share
-  byte-identical coordinates (perfect weather control, irradiance error cancels
-  exactly). DSUN-01 spans ~162 km across three states, so it cancels only
-  partially. Clustering on raw lat/lon is degenerate on VEGAS-01 — consider the
-  `kg_climate` Köppen column in `config/fleet_sites.csv` instead.
-- **`performance_index` is kWh per kWp**, not actual/expected. If you want the
-  ratio as a detector input, add it as a new field and bump the schema rather
-  than redefining the existing one — it is the y-axis of Screen 2's chart.
+Three things worth knowing if you touch them:
 
-Ground truth for an accuracy figure needs `fault_injection.py`, which does not
-exist yet.
+- **The derate is fleet-wide on purpose.** Making it per-site is the single most tempting change and
+  it silently breaks the product: a per-site derate fits itself to whatever the site is producing, so
+  a faulty site gets a lower bar and is declared healthy. There is a test that fails if it moves.
+- **The z threshold is calibrated, not a constant.** It depends on cohort size and contamination rate.
+  Re-run `score_detector.py --calibrate` if the fleet changes size.
+- **`performance_index` is kWh per kWp**, not actual/expected. The detector uses `performance_ratio`
+  (actual/expected), which is a separate quantity computed in `baseline.py` and never written to the
+  schema. Don't conflate them — `performance_index` is the y-axis of Screen 2's chart.
 
 ---
 
@@ -197,7 +216,7 @@ Ranges ending in `_range` drive Screen 4's pessimistic toggle. Keep that pattern
 - **No magic numbers in code.** Commercial constants go in
   `config/assumptions.json`.
 - **Performance values are always normalised** (kWh per kWp). Sites range
-  40.56 – 1153.49 kWp.
+  40.56 – 277.16 kWp. (The old 1153.49 upper bound was GOLDEN-01, dropped 19 Aug.)
 - **Do not fabricate data.** Where something is unavailable, omit the feature or
   label it. `PLACEHOLDER` means a fake value is present and must not ship;
   `SIMULATED` means real method, sample input.
@@ -205,4 +224,4 @@ Ranges ending in `_range` drive Screen 4's pessimistic toggle. Keep that pattern
 
 ---
 
-*Schema 1.3.0 · questions to D.*
+*Schema 1.6.0 · pipeline 0.5.0 · questions to D.*

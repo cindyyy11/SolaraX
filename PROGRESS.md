@@ -4,7 +4,7 @@
 > [`CLAUDE.md`](./CLAUDE.md); this file is status and nothing else. Update it at the end of every
 > working session — append to the log, don't rewrite history.
 
-**Last updated: 19 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **12 days left**
+**Last updated: 30 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **~1 day left**
 
 ---
 
@@ -12,10 +12,10 @@
 
 | | |
 |---|---|
-| **Phase** | Phase 2 — M1 shipped, M4 economics shipped, M2/M3 not started |
-| **Code written** | Pipeline + 4 dashboard screens run on real data. **23 PLACEHOLDER values remain** |
+| **Phase** | Phase 3 — M1, M2, M3, M4 and the dashboard all run on real data |
+| **Code written** | Full BATCH pipeline end to end. **1 PLACEHOLDER value remains** (`$.roi`, M4/C) |
 | **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
-| **Schema** | 1.5.0, frozen, 19 validator rules · 45 validator tests · 26 injection tests |
+| **Schema** | 1.6.0, frozen and UNCHANGED by M2/M3 · pipeline 0.5.0 · 19 validator rules · **105 pipeline tests** |
 | **Public URL** | None yet |
 
 ---
@@ -24,9 +24,13 @@
 
 | # | Blocker | Why it's blocking | Owner |
 |---|---|---|---|
-| 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission** | Cindy (repo owner) |
+| 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission**. Unchanged since 16 Aug — now the single largest risk | Cindy (repo owner) |
 | 2 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
-| 3 | **M2 and M3 unbuilt** | Every RM figure is arithmetic on a placeholder loss fraction until the detector exists. This is the 25% Technical Feasibility row | Cindy (A) |
+| 3 | **No public dashboard URL** | No `vercel.json`, no `.github/workflows/` — nothing exists to deploy. The "nightly GitHub Action" in `ARCHITECTURE-PLAN.md` §3.5 has never been written | D |
+| 4 | **`VisionEvidence` posts to `127.0.0.1:8000`** | Rendered unconditionally on Screen 2. On a deployed HTTPS URL it is mixed-content blocked and fails for every judge | B / D |
+
+**Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug) ·
+~~**M2 and M3 unbuilt**~~ (30 Aug — both shipped, see log).
 
 **Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug:
 M1, M4, dashboard, harness all shipped).
@@ -52,22 +56,64 @@ failed; HKUST cannot exercise cross-cohort clustering anyway. See [`docs/DECISIO
 | # | Module | Status |
 |---|---|---|
 | 1 | Fleet Data Ingestion | ✅ **Built** — real PVDAQ, 11 sites, 2 cohorts (Chang Zhe covering; owned by C) |
-| 2 | Sensor-Free Baseline | ⬜ Not started — `expected_kwh` is null, `irradiance_source` NONE (A) |
-| 3 | **Fleet Peer Benchmarking** ⭐ | ⬜ Not started — flagged sites are a hardcoded list (A) |
-| 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. Inputs stay placeholder until M3 (C) |
-| 5 | Drone & Visual Verification | ⬜ Not started — `evidence` block not emitted (B) |
+| 2 | Sensor-Free Baseline | ✅ **Built** — pvlib on NASA POWER. R² 0.89, MAE 17.8%. `irradiance_source` NASA POWER (A) |
+| 3 | **Fleet Peer Benchmarking** ⭐ | ✅ **Built** — robust peer-deviation z-score. Precision 86.7%, recall 65.0% held out (A) |
+| 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. **Loss input is now measured, not assumed** (C) |
+| 5 | Drone & Visual Verification | 🟡 Model + API + UI exist; `evidence` block still not emitted into `dispatch.json` (B) |
 | 6 | Dashboard (Vue 3) | ✅ **Built** — four screens, zero console errors (D) |
 | 7 | API / Supabase | ⬜ Not started (D) |
-| 8 | Testing & Packaging | 🟡 Partial — 71 pipeline tests; no demo video (E) |
+| 8 | Testing & Packaging | 🟡 Partial — 105 pipeline tests; no demo video (E) |
 
-**71 pipeline tests.** **Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
-fault-injection harness producing M3's ground truth.
+**105 pipeline tests** (was 71; +34 for M2/M3). **Also built (C, supporting):** Malaysian reference
+cases · reproducible fleet-median script · fault-injection harness producing M3's ground truth.
 
 ---
 
 ## Log
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
+
+### 30 Aug 2026 — M2 and M3 shipped; 23 placeholders down to 1
+
+Branch `feat/m2-m3-baseline-detector`. Full method: [`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md).
+
+- **M2 sensor-free baseline built.** NASA POWER hourly irradiance → pvlib (Erbs → Hay-Davies →
+  SAPM cell temperature → PVWatts). **R² 0.8925, MAE 17.80 %, nRMSE 28.33 %** over 2,314 analysed
+  site-days. One free parameter — the system derate — calibrated **fleet-wide, never per site**,
+  because a per-site fit absorbs the fault it is supposed to reveal. Measured 0.798, moves only to
+  0.758–0.780 under ten deliberately contaminated runs.
+- **M3 peer benchmarking built.** Robust peer-deviation z-score (Iglewicz-Hoaglin modified z-score,
+  median/MAD) on a reference-normalised performance ratio. **Precision 86.7 %, recall 65.0 %,
+  FPR 6.7 %** on 100 held-out site-runs. Ladder: 88.9 % recall at ≥30 %, ~45 % at 10–20 %, 85.7 % on
+  soiling ramps. Cause-shape agreement 88.5 %.
+- **Cohorts are now derived, not declared.** Köppen zone then single-linkage great-circle clustering
+  reproduces DSUN-01 and VEGAS-01 exactly from coordinates alone. The code checks that and reports a
+  disagreement rather than smoothing it over.
+- **The threshold is calibrated, not quoted.** Iglewicz-Hoaglin's textbook −3.5 **missed a 35 % step
+  drop** on this fleet — a 5-site cohort with 2 faults is 40 % contamination against MAD's 50 %
+  breakdown point, so the faults inflate the MAD they are measured against. Operating point now swept
+  on calibration seeds and reported on disjoint test seeds.
+- **Two real findings in the real data, neither planted.** S-1276 (Agassi Building B) reported
+  **exactly 0.00 kWh for all 31 days of January 2019** at full sampling, and separately collapses from
+  5.42 to 2.82 kWh/kWp/day across July–August — in Las Vegas, in peak season. The January outage broke
+  the first version of the reference normalisation (median → 0.27, inflating every later day 3.7× and
+  making the fleet's worst site look like its best). Fixed with a 75th-percentile reference over
+  non-zero days.
+- **`dispatch.json` is now `BUILT`.** 23 PLACEHOLDER values → **1**, and the one left is `$.roi`,
+  which belongs to M4/C. Validator still passes all 19 rules. **Schema unchanged at 1.6.0** — M2 and
+  M3 fill fields that were always in the contract, so the frontend needs no migration. Pipeline
+  0.5.0.
+- **Real-fleet result is 0 dispatch / 2 monitor / 9 healthy, RM 1,712 at risk.** Nothing clears the
+  RM 1,500 visit threshold this month. That is the product working as designed, and the `--injected`
+  run (labelled SIMULATED) gives the dispatch-flow demo.
+- **Fixed a test blocker owned by nobody:** `pipeline/test_cv_model.py` ran module-level code at
+  pytest **collection** time against a gitignored image path, so `pytest pipeline/` aborted and ran
+  **zero** tests. Renamed to `cv_smoke_check.py` (M5 logic untouched). Suite went 0 → **105 passing**.
+- **`pipeline/requirements.txt`** gained pvlib and scipy. It had uncommitted M5 additions in the
+  working tree from someone else's session; those were preserved, not overwritten.
+
+**Still open and not mine:** the repo is still 404 to the public, there is no deploy config of any
+kind, and `VisionEvidence` posts to `127.0.0.1:8000` from a screen that will be served over HTTPS.
 
 ### 19 Aug 2026 — tariff sourced, fleet corrected, two decisions closed
 

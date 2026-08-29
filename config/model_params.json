@@ -1,0 +1,75 @@
+{
+  "_comment": "Model parameters for M2 (sensor-free baseline) and M3 (fleet peer benchmarking). SEPARATE FROM assumptions.json ON PURPOSE: that file holds COMMERCIAL constants and is copied verbatim into dispatch.json.assumptions, whose shape docs/Schema.md section 4 freezes. A temperature coefficient is not a commercial constant and does not belong on Screen 4 beside the tariff. Same rule applies though - no magic numbers in code, every value here carries a note saying where it came from.",
+
+  "baseline": {
+    "_method": "pvlib. Hourly satellite GHI -> Erbs decomposition -> Hay-Davies transposition onto the array plane -> SAPM cell temperature -> PVWatts DC -> daily kWh. Documented formula in docs/M2-M3-METHOD.md.",
+
+    "array_tilt_degrees": 10.0,
+    "array_azimuth_degrees": 180.0,
+    "_orientation_note": "ONE FLEET-WIDE GEOMETRY, NOT A PER-SITE MEASUREMENT. PVDAQ publishes no tilt or azimuth for any system in this fleet. 180 degrees is due south, standard for a northern-hemisphere fixed array. The tilt was chosen by sweeping 5-30 degrees against all 2314 analysed site-days and taking the minimum normalised RMSE; the optimum is shallow and flat (nRMSE 28.25 % at 10 deg, 28.33 % at 15, 28.43 % at 5, 29.40 % at 30), and 10 degrees also matches the ballasted low-tilt C&I rooftops these sites actually are. Fitted FLEET-WIDE for the same reason as the derate: one global parameter over 2314 site-days cannot absorb an individual site's fault. A site whose true orientation differs from the fleet value carries a CONSTANT proportional error, which is what M3's reference-period normalisation removes - see detector.reference_period_days. The upgrade path is per-site orientation fitting (pvanalytics.system.infer_orientation_fit_pvwatts); not taken here because a per-site fit on a window that already contains a fault absorbs the fault into the geometry and reports the site healthy.",
+
+    "albedo": 0.2,
+    "_albedo_note": "pvlib default for generic ground. Ground-reflected irradiance is a low-single-digit share of plane-of-array total at 15 degrees tilt, so this is not a sensitive parameter.",
+
+    "transposition_model": "haydavies",
+    "decomposition_model": "erbs",
+    "_irradiance_model_note": "Erbs because NASA POWER publishes GHI only - DNI and DHI have to be inferred before anything can be transposed. Hay-Davies over isotropic because it carries the circumsolar term, and over Perez because Perez needs airmass and a coefficient lookup for accuracy this application cannot use: the fleet-wide derate calibration absorbs a percent-level transposition bias, and the peer comparison removes what is left.",
+
+    "temperature_model": "sapm",
+    "temperature_model_configuration": "close_mount_glass_glass",
+    "_temperature_model_note": "pvlib SAPM cell-temperature model. close_mount_glass_glass is the parameter set for roof-parallel mounting with restricted rear ventilation, which is what config/fleet_sites.csv mount_type=roof describes. Open-rack parameters would understate cell temperature and make every summer day look like underperformance.",
+
+    "gamma_pdc_per_c": -0.0035,
+    "_gamma_note": "Temperature coefficient of maximum power, per degree C. -0.35 %/C is the standard value for crystalline silicon and the pvlib PVWatts default. PVDAQ publishes no module datasheet for these systems, so a module-specific value is not available.",
+
+    "reference_cell_temp_c": 25.0,
+    "reference_irradiance_w_m2": 1000.0,
+    "_stc_note": "Standard Test Conditions. Definitional, not an assumption.",
+
+    "min_modelled_kwh_for_calibration": 5.0,
+    "_calibration_floor_note": "Site-days whose MODELLED output is below this are dropped from the derate calibration. The calibration is a ratio of measured to modelled, and near zero that ratio is dominated by division noise rather than by system performance. 5 kWh is below the worst real day of the smallest site (40.56 kWp) in this window.",
+
+    "derate_calibration": "fleet_median",
+    "_derate_note": "The system derate - soiling, wiring, mismatch, inverter efficiency, availability, nameplate tolerance - is the ONE free parameter in the baseline, and it is deliberately fitted ONCE FLEET-WIDE rather than per site. A per-site derate would fit itself to whatever that site is actually producing, absorbing a real fault into the baseline and reporting the faulty site as healthy. The fleet median is robust to a minority of degraded site-days by construction. Its cost is stated rather than hidden: if the WHOLE fleet degrades together, the median moves with it and the absolute baseline sees nothing. That is the correlated-failure blind spot README.md already names."
+  },
+
+  "detector": {
+    "_method": "Robust peer-deviation z-score. Iglewicz-Hoaglin modified z-score (median / MAD) computed across cohort peers on the same calendar day, on a performance ratio that has first been normalised against each site's own reference period. Documented formula in docs/M2-M3-METHOD.md.",
+
+    "reference_period_days": 60,
+    "_reference_note": "The leading days of the window, used to establish each site's own baseline level so that a constant installation bias - wrong assumed tilt, an unmodelled shading horizon, a nameplate that is not what the catalogue says - is not read as a fault. CHOSEN AGAINST THE INJECTION PROTOCOL: fault_injection.py draws every start date from the MIDDLE THIRD of the window, so on a 233-day window nothing is injected before day 77. A 60-day reference is therefore clean by construction, with 17 days of margin. The stated cost: a fault already present on day 1 is normalised away and this detector will not see it. Peer comparison still can, which is why both layers exist.",
+
+    "reference_quantile": 0.75,
+    "_reference_quantile_note": "The reference level is the 75th percentile of the site's performance ratio over the reference period, not its median. THIS IS LOAD-BEARING AND IT WAS FOUND THE HARD WAY. S-1276 reported exactly 0.00 kWh on all 31 days of January 2019 at full sampling - a month-long outage, not a logger gap. A median over the 60-day reference period sat at 0.27, so dividing by it INFLATED every later day by 3.7x and turned a site with a real mid-year collapse into the best performer in its cohort. A high quantile asks what the site produces when it is working, which is the quantity the normalisation actually wants, and faults only ever push performance DOWN - so an upper quantile is robust in the correct direction. Applied to non-zero days only, with min_reference_days as the guard.",
+
+    "min_reference_days": 20,
+    "_min_reference_note": "A site needs this many non-zero days inside the reference period before its reference level is trusted. Below it, the site is reported as un-normalisable and left out of detection with a stated reason, rather than being scored off a reference estimated from a handful of days. Saying nothing is better than saying something unfounded about whether to send a technician.",
+
+    "evaluation_window_days": 30,
+    "_evaluation_note": "The trailing days the reported score is computed over. Matches the monthly reporting cadence the product sells - the question is which sites need a visit THIS MONTH.",
+
+    "modified_z_threshold": -0.5,
+    "_threshold_note": "CALIBRATED ON HELD-OUT DATA, NOT TAKEN FROM THE TEXTBOOK - and the difference is the single most important thing to be able to defend about this module. Iglewicz and Hoaglin (1993) recommend -3.5 for the modified z-score, and that is the right number for their problem: ONE outlier in an otherwise clean sample. It is the wrong number here, for a reason specific to small fleets. MAD has a 50 % breakdown point, and a 5-site cohort carrying 2 faults is at 40 % contamination - close enough that the faulty sites inflate the very MAD they are being measured against, compressing every z-score toward zero. At -3.5 this detector missed a 35 % step drop, which is not caution, it is a mis-specified test. So the operating point was measured: pipeline/score_detector.py sweeps the threshold on CALIBRATION seeds and reports accuracy on a DISJOINT set of TEST seeds. F1 peaks at -0.5 (precision 92 %, recall 75 % on calibration) and falls away on both sides, so this is an interior optimum rather than the edge of a range. On a tie the STRICTER threshold is taken. Re-run the calibration when the fleet changes size - the right value depends on cohort size and contamination rate, which is exactly why it is not a constant.",
+
+    "min_material_deviation": 0.02,
+    "_materiality_note": "A site must sit at least this far below its cohort - 2 % of its own expected output, the same number as the resolution floor - before it can be flagged at all, however consistent the shortfall is. WITHOUT THIS THE RULE IS WRONG IN A WAY THE STATISTICS CANNOT SEE: persistence separates faults from controls almost perfectly on this fleet, so a rule leaning on it alone would flag a site sitting a harmless half a percent under its peers every single day. Consistency is evidence that something is real; materiality is what makes it worth knowing. This is the anomaly-level floor only - whether the shortfall is worth a VISIT is money, and that decision belongs to M4's dispatch threshold, not here.",
+
+    "site_mad_floor_ratio": 0.02,
+    "_site_mad_floor_note": "Absolute floor on the cohort's site-level MAD, in units of expected output. VEGAS-01's five roofs share one coordinate and one weather feed, and over a month they can agree to a fraction of a percent - at which point an unfloored divide turns a harmless 0.5 % difference between two healthy sites into a large z-score and dispatches a technician. This is a statement about resolution: below 2 % of expected output, this method does not claim to tell two sites apart. It is also the level the divergence date is dated against.",
+
+    "mad_floor_fraction": 0.02,
+    "_mad_floor_note": "MAD is floored at this fraction of the cohort median before dividing. VEGAS-01's five roofs share one coordinate and one weather feed, so their MAD can approach zero on a calm clear day - and an unfloored divide then turns a rounding-level difference into an unbounded z-score. The floor is what stops a 0.3 percent spread from reading as a catastrophic fault.",
+
+    "rolling_median_days": 7,
+    "_rolling_note": "Window for the smoothed z-score used to locate the divergence date. Seven days spans a full week, so it cannot be moved by a single overcast weekend.",
+
+    "min_persistence": 0.75,
+    "_persistence_note": "Fraction of days in the evaluation window on which the site must sit BELOW ITS COHORT MEDIAN before it is flagged. A genuine fault persists; one bad day is a cloud, a curtailment event, or a logger gap. Under the null a healthy site is below its peers about half the time by definition, so 0.75 is comfortably clear of chance while still admitting a fault with a few good days in it. This is also what is published as detection.confidence, because it is a number a reader can restate in words without a statistics course: 'below its peers on 27 of the last 30 days'.",
+
+    "soiling_slope_threshold_per_day": -0.002,
+    "_slope_note": "Theil-Sen slope of the post-divergence z series, per day. Steeper decline than this reads as a progressive loss (soiling, vegetation growth); flatter reads as a step (breaker trip, string dropout, inverter fault). Used ONLY to word the cause hypothesis, never to decide whether a site is flagged.",
+
+    "clustering_max_km": 250.0,
+    "_clustering_note": "Single-linkage distance cutoff for cohort formation, applied WITHIN a Koppen climate zone. 250 km comfortably joins DSUN-01's 162 km spread while leaving the two zones separate. Clustering on raw lat/lon alone is degenerate on this fleet - five VEGAS sites share byte-identical coordinates - so climate zone is the primary key and distance is the tie-break, per HANDOFF.md."
+  }
+}

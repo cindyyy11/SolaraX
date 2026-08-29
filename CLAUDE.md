@@ -95,8 +95,17 @@ pays for a site visit. O&M aggregators are future expansion, not the MVP target.
 | 7 | API Layer | Serves the ranked queue without touching model code | D |
 | 8 | Testing, Demo, Submission | Reproducibility, video, deliverables | E |
 
-**DO NOT BUILD M2, M3 or M5.** They belong to A and B. If a task needs one, emit a `PLACEHOLDER`
-value and a `TODO` comment naming the owner. Never write a real implementation of them.
+**DO NOT BUILD M5.** It belongs to B. If a task needs it, emit a `PLACEHOLDER` value and a `TODO`
+comment naming the owner. Never write a real implementation of it.
+
+**M2 and M3 were built by their owner (A) on 30 Aug** and are no longer off-limits — method,
+formulas and measured accuracy in [`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md). They still
+belong to A: change the method in `pipeline/baseline.py` and `pipeline/peer_benchmark.py`, not by
+growing analysis logic inside `generate_dispatch.py`, which only adapts their output onto the
+artifact. Two invariants there are load-bearing and have tests guarding them — **the system derate
+is calibrated fleet-wide, never per site**, and **the detector threshold is calibrated on held-out
+seeds, not taken from the textbook**. The reasoning for both is in the method doc; do not "tidy"
+either into a constant.
 
 **Fleet data detects, drone verifies.** The queue answers *where to go*; a flight answers *what's
 wrong* once you're there.
@@ -151,14 +160,17 @@ These are **not** interchangeable, and the distinction is deliberate.
 - **Every commercial constant lives in `config/assumptions.json`.** No magic numbers in code, ever.
   Judges ask where a number came from; a clean config is the answer.
 - **Performance values are ALWAYS normalised (kWh per kWp)**, never raw kWh. Sites range
-  **40.56 – 1153.49 kWp** and must be comparable on one axis.
+  **40.56 – 277.16 kWp** and must be comparable on one axis. (The 1153.49 figure predates
+  GOLDEN-01 being dropped on 19 Aug; the fleet table below has always been right.)
 - **Do not fabricate data.** Real PVDAQ only, plus clearly-labelled synthetic fault injection.
   Where real data is unavailable, omit the feature or label it `SIMULATED` — never invent numbers
   that look measured.
 - **`data/` — processed aggregates are committed, raw day-files are not.** The threshold is
   **~1 MB per file**, so it is checkable rather than a judgement call:
-  - `data/processed/*.parquet` — **committed.** ~115 KB total, and it lets a teammate start on
-    M2/M3 without a 40 MB pull. Regenerate with `pipeline/fetch_pvdaq.py`.
+  - `data/processed/*.parquet` — **committed.** ~490 KB total, and it lets a teammate run the
+    whole pipeline without a 40 MB PVDAQ pull or a NASA POWER round trip. Regenerate with
+    `pipeline/fetch_pvdaq.py` and `pipeline/fetch_irradiance.py`. The largest single file is
+    `irradiance_hourly.parquet` at ~374 KB — still comfortably inside the ~1 MB rule.
   - `data/raw/` — **never committed.** This is where bulk accumulates.
   - `data/*.json` reference pulls (e.g. PVGIS-ERA5 Klang) — committed.
 
@@ -268,8 +280,13 @@ Frontend needs Node `^22.18.0 || >=24.12.0`.
 ```
 python pipeline/explore_bucket.py <prefix>   # list S3 paths, no download
 python pipeline/fetch_pvdaq.py               # pull + aggregate to daily
+python pipeline/fetch_irradiance.py          # NASA POWER cache — M2 needs it
+python pipeline/baseline.py                  # M2 baseline + its measured accuracy
+python pipeline/peer_benchmark.py            # M3 detector over the real fleet
+python pipeline/score_detector.py            # M3 accuracy vs injected ground truth
 python pipeline/generate_dispatch.py         # produce dispatch.json
 python pipeline/validate_dispatch.py         # assert schema conformance
+python -m pytest pipeline/                   # 105 tests
 cd apps/web && npm run dev                   # dashboard
 ```
 
