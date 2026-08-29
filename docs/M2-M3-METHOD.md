@@ -255,9 +255,13 @@ method, synthetic labels.
 Reproduce:
 
 ```bash
-python pipeline/score_detector.py --calibrate 42 43 44 45 \
-                                  --seeds 50 51 52 53 54 55 56 57 58 59
+python pipeline/score_detector.py
 ```
+
+The no-argument run **is** the honest run: it calibrates on seeds 42–45 and reports on the disjoint
+50–59, and the artifact it writes is the one quoted here. That is deliberate. An earlier version
+defaulted to the calibration seeds with no split, so a bare run silently replaced the held-out
+numbers with worse-provenance ones and nothing in the output said so.
 
 Full output: [`pipeline/output/detector_accuracy.json`](../pipeline/output/detector_accuracy.json).
 
@@ -303,11 +307,97 @@ fleet.
 
 ---
 
+## Does it actually get better as the fleet grows?
+
+The Scalability rubric row (15 %) claims peer benchmarking **improves** with fleet size. That is a
+testable statement, so it was tested rather than asserted.
+
+`pipeline/scalability_study.py` takes the same injected runs, shrinks each cohort to every possible
+subset of size *k*, and re-runs **only the peer comparison** — M2's baseline is untouched, because
+the derate is fleet-wide and does not depend on how many peers a site has. 1,100 site-evaluations
+across the ten held-out seeds.
+
+| Peers in cohort | Evaluations | **ROC AUC** | Precision | Recall | FPR | Cohort MAD |
+|---|---|---|---|---|---|---|
+| 3 | 600 | **0.855** | 84.2 % | 51.2 % | 6.4 % | 0.0766 |
+| 4 | 400 | **0.897** | 78.2 % | 65.0 % | 12.1 % | 0.0899 |
+| 5 | 100 | **0.913** | 86.7 % | 65.0 % | 6.7 % | 0.1077 |
+
+**AUC rises monotonically: 0.855 → 0.897 → 0.913.**
+
+**Why AUC is the headline and not recall.** The −0.5 operating point was calibrated at cohort size 5.
+A threshold-dependent metric alone would partly measure that mismatch at sizes 3 and 4 rather than the
+method's information content — which is exactly the objection worth pre-empting. **ROC AUC does not
+depend on any threshold**, so the trend cannot be an artifact of where the threshold sits. Precision
+and false-positive rate are reported as colour and they are visibly noisier, which is the expected
+consequence of a miscalibrated threshold, not a contradiction.
+
+**Read the MAD column carefully — it moves the opposite way to intuition, and that is the
+interesting part.** Median cohort MAD *rises* with cohort size (0.077 → 0.108). That is not the
+cohort getting noisier. **MAD estimated from 3 points is biased low**, and since it is the z-score's
+denominator, understating it *inflates* every score and destabilises the operating point. The rising
+number is the estimator becoming unbiased. This was predicted the wrong way round when the study was
+designed; the data corrected it, and the correction is a better argument than the original guess —
+small cohorts do not just have less information, they have *overconfident* statistics.
+
+**The mechanism** is contamination. One fault in a 3-site cohort is 33 % of the sample against MAD's
+50 % breakdown point; in a 5-site cohort it is 20 %. More peers means the robust statistic stays
+further from the point where it stops being robust.
+
+> **Ceiling, stated plainly.** The largest analysed cohort in this fleet is 5 sites, so this is a
+> measured trend across **3–5 peers** — not a demonstration at fleet scale. The contamination
+> mechanism explains why it continues past 5; the data does not reach that far. Anyone quoting this
+> should quote the range with it.
+
+Reproduce: `python pipeline/scalability_study.py`. Full output:
+[`pipeline/output/scalability.json`](../pipeline/output/scalability.json).
+
+---
+
+## Hand-calculated check
+
+Red-team item 1 asks whether M2's output matches a hand-calculated value for one sample day at one
+site — a different question from "do the tests pass". A pipeline can be internally consistent, well
+tested, and quietly computing something other than what this document claims.
+
+**S-1277** (Agassi Building C, 40.56 kWp — the smallest site in the fleet), **2019-06-21**, the
+summer solstice, at its peak hour 19:00 UTC. Solstice noon in Las Vegas is the most demanding point
+on the chain: highest irradiance and highest cell temperature, so the temperature correction is
+carrying its largest load and an error in it cannot hide.
+
+| Quantity | Value |
+|---|---|
+| Plane-of-array irradiance | 1089.94 W/m² |
+| Cell temperature | 84.90 °C |
+| Capacity | 40.56 kWp |
+| γ | −0.0035 /°C |
+
+```
+dc_kw = 40.56 × (1089.94 / 1000) × (1 + (−0.0035) × (84.90 − 25))
+      = 40.56 × 1.08994 × 0.79036
+      = 34.940074 kW
+```
+
+**Pipeline output for that hour: 34.940074 kW.** Agreement to 9 decimal places.
+
+Pinned in `test_baseline.py::HandCalculationTests`, which rebuilds the irradiance chain by calling
+pvlib directly rather than through `baseline.py` — so the library is shared, but none of our code is.
+If `model_site_hourly` stops implementing the documented formula, or a constant drifts out of
+`config/model_params.json`, that test fails.
+
+It also asserts the temperature correction is genuinely applied: at 84.9 °C it removes ~21 % of
+output, and without it peak POA above 1000 W/m² would push the model **over nameplate**. If γ were
+ever zeroed, every other test in the file would still pass while the baseline silently over-predicted
+every summer day — turning healthy hot-climate sites into dispatch candidates.
+
+---
+
 ## Honest limitations
 
 1. **Detection floor around 20 % on this fleet.** The cohort's healthy sites genuinely spread ±7–9 %
    in peer-relative terms — different roof geometries against one fleet-wide assumption — and a
-   shortfall has to clear that spread. A larger fleet, or per-site orientation fitting, tightens it.
+   shortfall has to clear that spread. A larger fleet, or per-site orientation fitting, tightens it —
+   and the scalability study above measures the first half of that claim rather than assuming it.
 2. **Faults present from day 1 are invisible.** Reference normalisation removes them by construction.
 3. **Correlated fleet-wide degradation is invisible to both layers.**
 4. **Small cohorts degrade the statistic.** Five sites with two faults is 40 % contamination against

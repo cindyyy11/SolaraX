@@ -189,6 +189,149 @@ class PhysicsTests(unittest.TestCase):
         self.assertLess(float(self.hourly().max()), capacity * 2.0)
 
 
+class HandCalculationTests(unittest.TestCase):
+    """Red-team item 1 — does M2 match a hand-calculated value for one site-day?
+
+    `hinfo/SUBMISSION-CHECKLIST.md` asks this directly, and it is a different
+    question from "do the tests pass". Everything else in this file checks that
+    the code behaves; this checks that the code computes THE DOCUMENTED FORMULA.
+    A pipeline can be internally consistent, well tested, and quietly evaluating
+    something other than what the method doc claims.
+
+    The subject is S-1277 (Agassi Building C, 40.56 kWp — the smallest site in
+    the fleet) on 2019-06-21, the summer solstice, at its peak hour. Solstice
+    noon in Las Vegas is the most demanding point on the chain: highest
+    irradiance, highest cell temperature, so the temperature correction is
+    carrying its largest load and an error in it cannot hide.
+
+    WHAT IS INDEPENDENT HERE. The test rebuilds the irradiance chain by calling
+    pvlib directly rather than through `baseline.py`, then evaluates the PVWatts
+    step as explicit arithmetic:
+
+        dc_kw = capacity_kwp × (poa / 1000) × (1 + γ × (T_cell − 25))
+
+    So pvlib is shared — it is a third-party library and not what is under test —
+    but none of our code is. If `model_site_hourly` ever stops implementing that
+    formula, or a constant drifts out of `config/model_params.json`, this fails.
+    """
+
+    SITE_SYSTEM_ID = "1277"
+    DATE = "2019-06-21"
+    PEAK_HOUR_UTC = "2019-06-21 19:00:00+00:00"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.irradiance = baseline.load_irradiance()
+        if cls.irradiance is None:
+            raise unittest.SkipTest(
+                "no irradiance cache — run pipeline/fetch_irradiance.py")
+        cls.params = baseline.load_model_params()
+        cls.site = next(site for site in baseline.load_fleet_sites()
+                        if site["source_system_id"] == cls.SITE_SYSTEM_ID)
+        cls.site_id = baseline.build_site_id(cls.SITE_SYSTEM_ID)
+
+    def day_frame(self):
+        return self.irradiance[
+            (self.irradiance["site_id"] == self.site_id)
+            & (self.irradiance["local_date"] == self.DATE)
+        ].sort_values("timestamp_utc")
+
+    def pipeline_hourly(self):
+        return baseline.model_site_hourly(
+            self.day_frame(),
+            float(self.site["lat"]), float(self.site["lon"]),
+            float(self.site["capacity_kwp"]), self.params["baseline"])
+
+    def test_peak_hour_matches_the_documented_formula(self):
+        import pvlib
+
+        parameters = self.params["baseline"]
+        frame = self.day_frame()
+        times = pd.DatetimeIndex(frame["timestamp_utc"])
+
+        ghi = pd.Series(frame["ghi_w_m2"].to_numpy(dtype=float), index=times)
+        temp_air = pd.Series(frame["temp_air_c"].to_numpy(dtype=float), index=times)
+        wind = pd.Series(frame["wind_speed_m_s"].to_numpy(dtype=float), index=times)
+
+        solar_position = pvlib.solarposition.get_solarposition(
+            times + pd.Timedelta(minutes=30),
+            float(self.site["lat"]), float(self.site["lon"]),
+            temperature=temp_air.to_numpy())
+        solar_position.index = times
+
+        decomposed = pvlib.irradiance.erbs(
+            ghi, solar_position["apparent_zenith"], times)
+        total = pvlib.irradiance.get_total_irradiance(
+            surface_tilt=parameters["array_tilt_degrees"],
+            surface_azimuth=parameters["array_azimuth_degrees"],
+            solar_zenith=solar_position["apparent_zenith"],
+            solar_azimuth=solar_position["azimuth"],
+            dni=decomposed["dni"], ghi=ghi, dhi=decomposed["dhi"],
+            dni_extra=pvlib.irradiance.get_extra_radiation(times),
+            albedo=parameters["albedo"],
+            model=parameters["transposition_model"])
+        poa = total["poa_global"].fillna(0.0).clip(lower=0.0).where(
+            solar_position["apparent_zenith"] < 90.0, 0.0)
+
+        thermal = pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS[
+            parameters["temperature_model"]][
+            parameters["temperature_model_configuration"]]
+        temp_cell = pvlib.temperature.sapm_cell(
+            poa_global=poa, temp_air=temp_air, wind_speed=wind, **thermal)
+
+        hour = pd.Timestamp(self.PEAK_HOUR_UTC)
+        index = list(times).index(hour)
+
+        poa_peak = float(poa.iloc[index])
+        cell_peak = float(temp_cell.iloc[index])
+        capacity = float(self.site["capacity_kwp"])
+        gamma = parameters["gamma_pdc_per_c"]
+
+        # The PVWatts DC equation, written out. This is the line that carries
+        # our two constants, and it is deliberately not a pvlib call.
+        hand_calculated_kw = (
+            capacity
+            * (poa_peak / parameters["reference_irradiance_w_m2"])
+            * (1.0 + gamma * (cell_peak - parameters["reference_cell_temp_c"]))
+        )
+
+        pipeline_kw = float(self.pipeline_hourly().iloc[index])
+
+        # Sanity-check the intermediates before the equality, so a failure says
+        # WHICH step moved rather than only that the answer changed.
+        self.assertTrue(1000 < poa_peak < 1200, "POA {}".format(poa_peak))
+        self.assertTrue(70 < cell_peak < 95, "cell temp {}".format(cell_peak))
+        self.assertAlmostEqual(hand_calculated_kw, 34.9401, places=3)
+        self.assertAlmostEqual(pipeline_kw, hand_calculated_kw, places=9)
+
+    def test_daily_total_is_the_sum_of_its_hours(self):
+        """kW over a 1-hour step is kWh. That is our aggregation, not pvlib's."""
+        hourly = self.pipeline_hourly()
+        daily = baseline.model_fleet_daily(
+            [self.site], self.day_frame(), self.params)
+
+        self.assertEqual(len(daily), 1)
+        self.assertAlmostEqual(
+            float(daily.iloc[0]["modelled_kwh_raw"]), float(hourly.sum()), places=9)
+
+    def test_the_temperature_correction_is_actually_applied(self):
+        """At 85 C cell temperature the correction removes about 21 % of output.
+
+        If γ were ever dropped or zeroed, every other test in this file would
+        still pass and the baseline would silently over-predict every summer day
+        — turning healthy hot-climate sites into dispatch candidates.
+        """
+        parameters = self.params["baseline"]
+        loss = abs(parameters["gamma_pdc_per_c"]) * (84.9 - 25.0)
+        self.assertGreater(loss, 0.15)
+
+        hourly = self.pipeline_hourly()
+        capacity = float(self.site["capacity_kwp"])
+        # Peak POA exceeds 1000 W/m^2, so an UNCORRECTED model would exceed
+        # nameplate. The corrected one must not.
+        self.assertLess(float(hourly.max()), capacity)
+
+
 class WindowTrimTests(unittest.TestCase):
     """The UTC-to-local shift pulls in a partial day that has no measurement."""
 

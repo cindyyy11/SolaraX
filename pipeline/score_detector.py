@@ -27,9 +27,11 @@ independent draw of sites, fault types, start dates and ladder positions, so
 pooling several gives a curve with something behind each point.
 
 Run:
-    python pipeline/score_detector.py                    # default 6 seeds
-    python pipeline/score_detector.py --seeds 42 43 44
-    python pipeline/score_detector.py --keep             # leave artifacts on disk
+    python pipeline/score_detector.py         # reproduces the published result:
+                                              # calibrate on 42-45, report on 50-59
+    python pipeline/score_detector.py --seeds 50 51        # faster, same split
+    python pipeline/score_detector.py --no-calibrate --seeds 60 61
+    python pipeline/score_detector.py --keep  # leave the injected artifacts on disk
 
 Writes: pipeline/output/detector_accuracy.json
         (and, transiently, the gitignored injected parquet files)
@@ -63,7 +65,17 @@ FLEET_INJECTED_PATH = os.path.join(PROCESSED_DIR, "fleet_daily_injected.parquet"
 GROUND_TRUTH_PATH = os.path.join(REPOSITORY_ROOT, "pipeline", "output", "ground_truth.json")
 ACCURACY_PATH = os.path.join(REPOSITORY_ROOT, "pipeline", "output", "detector_accuracy.json")
 
-DEFAULT_SEEDS = (42, 43, 44, 45, 46, 47)
+# THE DEFAULTS REPRODUCE THE PUBLISHED RESULT, and they are split on purpose.
+#
+# These used to default to 42-47 with no calibration split, which meant a bare
+# `python pipeline/score_detector.py` quietly overwrote detector_accuracy.json
+# with numbers measured on the seeds the threshold was CHOSEN on - worse
+# provenance than the file it replaced, with nothing in the output saying so.
+# It happened once during the build. Now the no-argument run is the honest run:
+# it calibrates on one set and reports on a disjoint one, and the artifact it
+# writes is the one the docs quote.
+DEFAULT_CALIBRATION_SEEDS = (42, 43, 44, 45)
+DEFAULT_SEEDS = (50, 51, 52, 53, 54, 55, 56, 57, 58, 59)
 
 # Severity buckets for the recall curve. A soiling ramp has no single magnitude
 # - its loss depends on how long it has been running - so it is reported on its
@@ -277,9 +289,15 @@ def main():
     parser.add_argument("--keep", action="store_true",
                         help="leave the injected artifacts on disk afterwards")
     parser.add_argument("--calibrate", type=int, nargs="+", metavar="SEED",
+                        default=list(DEFAULT_CALIBRATION_SEEDS),
                         help="calibration seeds: sweep the score threshold on "
                              "these and report the table, then evaluate the "
-                             "configured threshold on --seeds as held-out data")
+                             "configured threshold on --seeds as held-out data. "
+                             "Pass --no-calibrate to score --seeds alone.")
+    parser.add_argument("--no-calibrate", dest="calibrate", action="store_const",
+                        const=None,
+                        help="skip the calibration sweep; report on --seeds only, "
+                             "which then carries no held-out guarantee")
     arguments = parser.parse_args()
 
     irradiance = load_irradiance()

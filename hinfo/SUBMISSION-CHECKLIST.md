@@ -63,10 +63,10 @@ Per the announcement these may be added or updated any time before the lock.
 
 | Deliverable | Module | Status |
 |---|---|---|
-| Cleaned multi-site dataset + preprocessing script | M1 | ⬜ |
-| Baseline model with documented formula | M2 | ⬜ |
-| Peer-benchmarking detector with a stated accuracy figure from a real test | M3 | ⬜ |
-| Economic ranking config, every assumption named and sourced | M4 | ⬜ |
+| Cleaned multi-site dataset + preprocessing script | M1 | ✅ 11 sites, 2 cohorts, 233 days. `pipeline/fetch_pvdaq.py` |
+| Baseline model with documented formula | M2 | ✅ **Built.** pvlib on NASA POWER, R² 0.89, MAE 17.8%. Formula + hand-calculated check in [`docs/M2-M3-METHOD.md`](../docs/M2-M3-METHOD.md) |
+| Peer-benchmarking detector with a stated accuracy figure from a real test | M3 | ✅ **Built.** Precision 86.7%, recall 65.0% on 100 held-out site-runs. `pipeline/output/detector_accuracy.json` |
+| Economic ranking config, every assumption named and sourced | M4 | ✅ `config/assumptions.json`, RP4 sourced to ST. Loss input is now measured, not assumed |
 | Image classifier with stated accuracy + SIMULATED labelling | M5 | ⬜ |
 | Deployed public dashboard URL, 4 screens | M6 | ⬜ |
 | Architecture diagram: ingestion → baseline → cohort → economics → API → dashboard | M7 | ⬜ (exists in Canva — export it) |
@@ -77,9 +77,9 @@ Per the announcement these may be added or updated any time before the lock.
 
 ## Red-team check — run together on 25 Aug (PRD v2 §13)
 
-1. Does M2's output match a hand-calculated expected value for one sample day at one site?
-2. Does M3 produce a stated accuracy/precision number from a real test run, not an estimate?
-3. Can we explain the cohort method — why a single-site dip in a stable cohort means fault, not weather — in two sentences, to a non-technical listener?
+1. ✅ **Closed.** M2 vs hand calculation, S-1277 on 2019-06-21 peak hour: 34.940074 kW both ways, agreement to 9 dp. Pinned in `test_baseline.py::HandCalculationTests`.
+2. ✅ **Closed.** Precision 86.7%, recall 65.0%, FPR 6.7% over 100 site-runs on ten held-out seeds, with the threshold calibrated on a disjoint set. Ladder decays 88.9% at ≥30% to ~45% at 10-20%.
+3. ✅ **Closed.** "We predict what each site should have produced from satellite weather alone, with nothing installed on any roof. Then we compare each site to its neighbours on the same day: a dip everyone shares is weather, a dip only one site has is a fault."
 4. Is every commercial assumption in M4 traceable to a named constant with a stated source or labelled range?
 5. Does the conclusion still hold at the pessimistic end of every Tier 2 range?
 6. Does M5 state an accuracy figure and clearly label simulated input?
