@@ -19,64 +19,164 @@ on-site pyranometer excludes most of this fleet.**
 
 ## The approach
 
-SolaraX ingests inverter generation across a whole fleet, builds an expected-output baseline that
-works **without on-site sensors**, and uses **the fleet itself as the control group** — sites in the
-same weather region benchmark each other.
+We predict what each site should have produced from satellite weather alone, with nothing installed
+on any roof. Then we compare each site to its neighbours on the same day:
 
-> A cohort-wide dip is weather. A single-site dip inside a stable cohort is a fault.
-> The size of the gap is the kWh lost, which becomes **RM/month at risk**.
+> **A dip everyone shares is weather. A dip only one site has is a fault.**
 
-The output isn't a heatmap. It's a list: *these five sites, this month, this much money.* The value
-is as much in the sites you **don't** visit as the ones you do.
+The size of the gap is the kWh lost, which becomes **RM/month at risk**. The output isn't a heatmap.
+It's a list: *these sites, this month, this much money.* The value is as much in the sites you
+**don't** visit as the ones you do.
 
-**Why the cohort layer matters technically:** satellite irradiance carries error, but every site in a
-cohort shares that error, so it cancels in the comparison. And accuracy *improves* as the fleet grows
-— more sites per weather region means tighter cohorts and fewer false flags.
+**Why the peer layer is the technical claim, not the baseline.** Satellite irradiance carries real
+error — ours measures **17.6 % mean absolute error on a single site-day**, and no amount of model
+polish fixes that, because it comes from resolving cloud timing across a ~50 km grid cell. But every
+site in a cohort is fed from that same cell on the same day, so the error lands on all of them at
+once and *subtracts out* of a peer comparison. The absolute baseline would need a sensor on every
+roof to resolve a 15 % fault. The peer comparison resolves it without one.
+
+That is also why accuracy **improves as the fleet grows** — and we measured it rather than asserting
+it. See below.
 
 ---
 
 ## Status — honest labelling
 
-This project labels everything **BUILT** (real data, real model) / **SIMULATED** (real method,
-sample input) / **PLANNED** (not yet built).
+Everything is labelled **BUILT** (real data through a real model) / **SIMULATED** (real method,
+synthetic or sample input) / **PLANNED** (not built). Live detail: [`PROGRESS.md`](./PROGRESS.md).
 
-**As of 16 Aug 2026, the entire pipeline is PLANNED.** The architecture is designed and agreed; no
-module is implemented yet. Live status: [`PROGRESS.md`](./PROGRESS.md).
-
-| Component | Status |
+| Module | Status |
 |---|---|
-| Architecture and method decisions | ✅ **Agreed** — [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCHITECTURE-PLAN.md) |
-| Real Malaysian satellite irradiance (PVGIS-ERA5, Bukit Raja/Klang) | ✅ **BUILT** — [`data/`](./data/) |
-| Modules 1–8 | ⬜ **PLANNED** |
+| 1 — Fleet data ingestion | ✅ **BUILT** — real NREL PVDAQ, 11 sites, 2 cohorts, 233 days |
+| 2 — Sensor-free baseline | ✅ **BUILT** — pvlib on NASA POWER satellite irradiance |
+| 3 — **Fleet peer benchmarking** ⭐ | ✅ **BUILT** — robust peer-deviation z-score |
+| 4 — Economic ranking | ✅ **BUILT** — RP4 tariff, every constant sourced |
+| 5 — Visual verification | 🟡 **SIMULATED** — classifier trained; not yet emitted into the artifact |
+| 6 — Dashboard (Vue 3) | ✅ **BUILT** — four screens |
+| 7 — API / hosted demo | ⬜ **PLANNED** — deployment configured, URL not yet live ([`DEPLOY.md`](./DEPLOY.md)) |
+| 8 — Testing & packaging | 🟡 108 pipeline tests; demo video not started |
 
-We will not claim a number this repo cannot produce.
+**We will not claim a number this repo cannot produce.** Every figure below is reproducible with a
+command in this repository.
+
+---
+
+## Measured results
+
+### The baseline (M2) — how well can you predict output with no sensors?
+
+Against 2,314 analysed site-days:
+
+| | |
+|---|---|
+| R² | **0.9008** |
+| Mean absolute error | **17.57 %** |
+| Normalised RMSE | 28.25 % |
+| Median bias | −0.00 % |
+
+Verified against a hand calculation at one site-day — S-1277 on the summer solstice, peak hour:
+`40.56 × (1089.94/1000) × (1 + (−0.0035) × (84.90 − 25)) = 34.940074 kW`, and the pipeline agrees to
+**nine decimal places**.
+
+`python pipeline/baseline.py --per-site`
+
+### The detector (M3) — how well does it find real faults?
+
+No open dataset labels site-level PV faults, so ground truth is manufactured: real measurements with
+faults of known type, magnitude and date injected. **Labelled SIMULATED** — real method, synthetic
+labels. The threshold is calibrated on one set of seeds and **reported on a disjoint set**.
+
+| | |
+|---|---|
+| Site-runs scored | 100 (40 faulted, **60 untouched controls**) |
+| **Precision** | **86.7 %** |
+| **Recall** | **65.0 %** |
+| False-positive rate | 6.7 % |
+| Cause-shape agreement | 88.5 % |
+
+**Recall by injected severity — the ladder:**
+
+| ≥ 30 % | 20–30 % | 10–20 % | Soiling ramp |
+|---|---|---|---|
+| 88.9 % | 16.7 % | 45.5 % | 85.7 % |
+
+**The curve decaying is the point.** A recall curve that falls off at low severity is evidence of an
+honest test; a flat 100 % would be evidence of a rigged one. The middle two rows rest on 6 and 11
+events and their ordering is sampling noise, not a finding. The defensible summary: severe faults and
+progressive soiling are caught reliably, and the floor is around 20 %.
+
+`python pipeline/score_detector.py`
+
+### Scalability — the claim, measured
+
+The rubric row says peer benchmarking gets *more* accurate as the fleet grows. We tested it by
+shrinking cohorts to every subset of each size and re-running only the peer comparison:
+
+| Peers in cohort | **ROC AUC** | Precision | Recall |
+|---|---|---|---|
+| 3 | 0.855 | 84.2 % | 51.2 % |
+| 4 | 0.897 | 78.2 % | 65.0 % |
+| 5 | **0.913** | 86.7 % | 65.0 % |
+
+AUC rises monotonically. It is the headline metric **because it is threshold-free** — the operating
+point was calibrated at cohort size 5, so a threshold-dependent metric alone would partly measure
+that mismatch rather than the method's information content.
+
+*Ceiling, stated plainly:* the largest cohort in this fleet is 5 sites, so this is a measured trend
+across **3–5 peers**, not a demonstration at fleet scale.
+
+`python pipeline/scalability_study.py`
+
+### What the fleet actually looks like this month
+
+**0 dispatch · 2 monitor · 9 healthy · RM 1,712/month at risk.**
+
+Nothing clears the RM 1,500 visit threshold. That is the product working as designed — the detector
+says something is wrong, the money says whether it is worth driving to.
+
+---
+
+## Something the method found that nobody was looking for
+
+**S-1276 (Agassi Building B) has a real fault in the real data, and it is not one we injected.**
+
+Its output runs 3.35 → 4.62 → 4.93 → 5.22 → 5.42 kWh/kWp/day from February to June, then drops to
+**3.49 in July and 2.82 in August** — in Las Vegas, during the two months of the year when output
+should peak. The detector flags it at 90 % persistence and dates the divergence to early July.
+
+The same site also reported **exactly 0.00 kWh on all 31 days of January** at full sampling. That one
+broke our first attempt at the method, and finding out why made it better.
 
 ---
 
 ## Method, named
 
-| Module | Method |
-|---|---|
-| 2 — Sensor-free baseline | `pvlib` clear-sky (Ineichen–Perez) + temperature correction, from satellite irradiance (NASA POWER · PVGIS · Open-Meteo). Normalisation and filtering via **NREL RdTools** |
-| 3 — Fleet peer benchmarking ⭐ | **Robust peer-deviation z-score** (median absolute deviation; Iglewicz–Hoaglin modified z-score) against a geographic weather cohort |
-| 4 — Economic ranking | kWh lost × Malaysian **RP4** tariff (four-component + AFA) → RM/month at risk → dispatch threshold |
-| 5 — Visual verification | YOLOv8 defect classification as *evidence on a flagged site*, never as the detector |
-
 Every flag traces to a calculation a person can check by hand. **An LLM may explain a score; it never
 computes one.**
 
+| Module | Method |
+|---|---|
+| 2 — Sensor-free baseline | NASA POWER hourly GHI → Erbs decomposition → Hay-Davies transposition → SAPM cell temperature → PVWatts DC, scaled by one **fleet-wide** calibrated derate |
+| 3 — Peer benchmarking ⭐ | **Robust peer-deviation z-score** — Iglewicz-Hoaglin modified z-score (median/MAD) across same-day cohort peers, on a reference-normalised performance ratio |
+| 4 — Economic ranking | kWh lost × Malaysian **RP4** tariff → RM/month at risk → dispatch threshold |
+| 5 — Visual verification | YOLOv8 classification as *evidence on an already-flagged site*, never as the detector |
+
+Full derivations, constants and limitations: **[`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md)**.
+
 ### Known limitations, stated up front
 
-- **The generation data is American** (NREL PVDAQ). It proves the method, not the market. No public
-  per-site Malaysian PV time series exists — verified three ways in [`docs/RESEARCH.md`](./docs/RESEARCH.md) §5.
-  The Malaysian *weather* half is real; the pilot is the ask.
-- **Fault labels are synthetic.** No open dataset ships site-level fault labels, so accuracy comes
-  from injecting faults of known type, magnitude and date into real series — with the failure region
-  shown, not hidden.
-- **Self-consumption curtailment is the hard problem.** C&I rooftops are clipped by on-site load, not
-  only by faults. Mitigation is designed, not hand-waved — [`docs/ARCHITECTURE-PLAN.md`](./docs/ARCHITECTURE-PLAN.md) §3.4.
-- **Correlated failure is a blind spot.** If a whole cohort degrades together, peer comparison sees
-  nothing — which is why the absolute physics baseline exists alongside it.
+- **The generation data is American** (NREL PVDAQ). It proves the method, not the market — no public
+  per-site Malaysian PV time series exists, verified three ways in
+  [`docs/RESEARCH.md`](./docs/RESEARCH.md) §5. The Malaysian *weather* half is real; the pilot is the ask.
+- **Detection floor around 20 %** on this fleet. Healthy sites genuinely spread ±7–9 % in
+  peer-relative terms, and a shortfall has to clear that.
+- **A fault present from day one is invisible** to the detector — the reference normalisation removes
+  it by construction.
+- **Correlated fleet-wide degradation is invisible** to both layers. If everything degrades together,
+  the peer comparison sees nothing.
+- **Fault labels are synthetic.** The defence is the decaying ladder and the 60 controls, not the labels.
+- **Small cohorts degrade the statistic.** Five sites with two faults is 40 % contamination against
+  MAD's 50 % breakdown point.
 
 ---
 
@@ -84,45 +184,61 @@ computes one.**
 
 ```
 SolaraX/
-├── CLAUDE.md      rules and direction lock
-├── PROGRESS.md    status, phase, blockers
-├── docs/          the product and how it's built
-├── hinfo/         the competition: rules, rubric, submission state
-└── data/          real datasets pulled into the repo
+├── CLAUDE.md        rules, direction lock, technical contract
+├── PROGRESS.md      status, phase, blockers
+├── HANDOFF.md       how to plug a module in
+├── DEPLOY.md        getting the dashboard public
+├── config/          every commercial constant + the fleet definition
+├── pipeline/        BATCH: ingestion → baseline → detection → ranking
+├── apps/web/        SERVE: Vue 3 dashboard
+├── docs/            the product and how it's built
+├── hinfo/           the competition: rules, rubric, submission state
+└── data/            datasets on disk
 ```
 
-Start with [`docs/PRD.md`](./docs/PRD.md) for what we're building, or
-[`docs/ARCHITECTURE-PLAN.md`](./docs/ARCHITECTURE-PLAN.md) for how.
+Start with [`docs/SolaraX_PRD_v2.md`](./docs/SolaraX_PRD_v2.md) for what we're building, or
+[`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md) for how the detection works.
+
+---
 
 ## Running it
 
-⬜ **Pipeline not yet runnable end-to-end.** Target: Modules 1→4 from one command on a clean
-machine. Full instructions land here when that is true, not before.
+**Pipeline** — Python 3.12 (3.11 also fine).
 
-### Frontend (`apps/web`)
+```bash
+pip install -r pipeline/requirements.txt
 
-Requires Node.js `^22.18.0 || >=24.12.0` and npm.
+python pipeline/fetch_irradiance.py      # NASA POWER cache — run once, ~30 s
+python pipeline/generate_dispatch.py     # writes dispatch.json, publishes to the frontend
+python pipeline/validate_dispatch.py     # asserts schema conformance
+python -m pytest pipeline/               # 108 tests
+```
 
-```powershell
+The processed PVDAQ aggregates and the irradiance cache are committed, so the pipeline runs without
+re-pulling 40 MB from S3. Regenerate them with `pipeline/fetch_pvdaq.py` and
+`pipeline/fetch_irradiance.py --force`.
+
+Reproduce the accuracy figures:
+
+```bash
+python pipeline/baseline.py --per-site      # M2 accuracy, per-site residuals
+python pipeline/score_detector.py           # M3 accuracy, held out
+python pipeline/scalability_study.py        # accuracy vs cohort size
+```
+
+**Frontend** — Node `^22.18.0 || >=24.12.0`.
+
+```bash
 cd apps/web
-npm install
-npm run dev
+npm ci
+npm run dev          # http://localhost:5173
 ```
 
-Other scripts: `npm run build` (production build) · `npm run test:unit` (Vitest) ·
-`npm run lint` (ESLint) · `npm run format` (Prettier).
+The dashboard reads the committed `dispatch.json` and falls back to a second committed copy if its
+primary source is unavailable — a judging window is not the moment to discover a hard dependency on a
+hosted service.
 
-Copy `apps/web/.env.example` to `apps/web/.env.local` and adjust `VITE_*` values as needed.
-
-### Pipeline
-
-Requires Python 3.11 (see [`CLAUDE.md`](./CLAUDE.md) — local is currently 3.14).
-
-```powershell
-python pipeline/explore_bucket.py pvdaq/    # list S3 paths, no download
-```
-
-Remaining pipeline commands land as the modules do.
+---
 
 ## Licence
 

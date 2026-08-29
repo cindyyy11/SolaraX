@@ -15,8 +15,8 @@
 | **Phase** | Phase 3 — M1, M2, M3, M4 and the dashboard all run on real data |
 | **Code written** | Full BATCH pipeline end to end. **1 PLACEHOLDER value remains** (`$.roi`, M4/C) |
 | **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
-| **Schema** | 1.6.0, frozen and UNCHANGED by M2/M3 · pipeline 0.5.0 · 19 validator rules · **105 pipeline tests** |
-| **Public URL** | None yet |
+| **Schema** | 1.6.0, frozen and UNCHANGED by M2/M3 · pipeline 0.5.0 · 19 validator rules · **108 pipeline tests** |
+| **Public URL** | None yet — deploy config committed, needs the Vercel import ([`DEPLOY.md`](./DEPLOY.md)) |
 
 ---
 
@@ -26,14 +26,11 @@
 |---|---|---|---|
 | 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission**. Unchanged since 16 Aug — now the single largest risk | Cindy (repo owner) |
 | 2 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
-| 3 | **No public dashboard URL** | No `vercel.json`, no `.github/workflows/` — nothing exists to deploy. The "nightly GitHub Action" in `ARCHITECTURE-PLAN.md` §3.5 has never been written | D |
-| 4 | **`VisionEvidence` posts to `127.0.0.1:8000`** | Rendered unconditionally on Screen 2. On a deployed HTTPS URL it is mixed-content blocked and fails for every judge | B / D |
+| 3 | **No public dashboard URL** | 🟡 **Config now exists** — `vercel.json` (with SPA rewrites) and `.github/workflows/ci.yml` are committed, and [`DEPLOY.md`](./DEPLOY.md) has the steps. Still needs someone with the Vercel account to import the project | D |
+| 4 | ~~**`VisionEvidence` posts to `127.0.0.1:8000`**~~ | ✅ **Fixed 30 Aug.** The panel is gated on a configured vision service; localhost is a DEV-only default and is dead-code-eliminated from production builds. Local M5 work is unaffected | B / D |
 
 **Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug) ·
 ~~**M2 and M3 unbuilt**~~ (30 Aug — both shipped, see log).
-
-**Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug:
-M1, M4, dashboard, harness all shipped).
 
 ---
 
@@ -56,15 +53,15 @@ failed; HKUST cannot exercise cross-cohort clustering anyway. See [`docs/DECISIO
 | # | Module | Status |
 |---|---|---|
 | 1 | Fleet Data Ingestion | ✅ **Built** — real PVDAQ, 11 sites, 2 cohorts (Chang Zhe covering; owned by C) |
-| 2 | Sensor-Free Baseline | ✅ **Built** — pvlib on NASA POWER. R² 0.89, MAE 17.8%. `irradiance_source` NASA POWER (A) |
+| 2 | Sensor-Free Baseline | ✅ **Built** — pvlib on NASA POWER. R² 0.90, MAE 17.6%. `irradiance_source` NASA POWER (A) |
 | 3 | **Fleet Peer Benchmarking** ⭐ | ✅ **Built** — robust peer-deviation z-score. Precision 86.7%, recall 65.0% held out (A) |
 | 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. **Loss input is now measured, not assumed** (C) |
 | 5 | Drone & Visual Verification | 🟡 Model + API + UI exist; `evidence` block still not emitted into `dispatch.json` (B) |
 | 6 | Dashboard (Vue 3) | ✅ **Built** — four screens, zero console errors (D) |
 | 7 | API / Supabase | ⬜ Not started (D) |
-| 8 | Testing & Packaging | 🟡 Partial — 105 pipeline tests; no demo video (E) |
+| 8 | Testing & Packaging | 🟡 Partial — 108 pipeline tests, CI on every push; no demo video (E) |
 
-**105 pipeline tests** (was 71; +34 for M2/M3). **Also built (C, supporting):** Malaysian reference
+**108 pipeline tests** (was 71; +37 for M2/M3). **Also built (C, supporting):** Malaysian reference
 cases · reproducible fleet-median script · fault-injection harness producing M3's ground truth.
 
 ---
@@ -73,14 +70,52 @@ cases · reproducible fleet-median script · fault-injection harness producing M
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
 
+### 30 Aug 2026 (later) — scalability measured, front door rewritten, deployment configured
+
+- **The Scalability claim is now measured, not asserted.** `pipeline/scalability_study.py` shrinks
+  each cohort to every subset of size k and re-runs only the peer comparison. **ROC AUC rises
+  monotonically: 0.855 → 0.897 → 0.913** across 3, 4 and 5 peers, over 1,100 site-evaluations on the
+  held-out seeds. AUC is the headline because it is threshold-free — the −0.5 operating point was
+  calibrated at cohort size 5, so a threshold-dependent metric alone would partly measure that
+  mismatch. Ceiling stated in the doc and the JSON: this is a trend across 3–5 peers, not a
+  demonstration at fleet scale.
+- **A prediction of ours was wrong and the doc says so.** Cohort MAD *rises* with cohort size rather
+  than falling. That is the estimator becoming unbiased, not the cohort getting noisier: MAD from 3
+  points is biased low, and since it divides the z-score, understating it inflates every score. Small
+  cohorts do not merely have less information, they have overconfident statistics.
+- **Red-team items 1, 2 and 3 closed** with evidence inline in `hinfo/SUBMISSION-CHECKLIST.md`.
+  Item 1 is a hand calculation at S-1277's solstice peak hour agreeing to 9 decimal places.
+- **README rewritten.** It still said *"As of 16 Aug 2026, the entire pipeline is PLANNED"* and
+  *"Modules 1–8 ⬜ PLANNED"* — the public front door telling a judge we had nothing while the repo
+  behind it had a working pipeline. Now carries the measured numbers, the honest limitations, and
+  working run instructions. Also fixed the dead `docs/PRD.md` link.
+- **Deployment configured.** `vercel.json` with **SPA rewrites** — without them a judge who refreshes
+  a site-detail page gets a CDN 404, because the router uses `createWebHistory`. Plus cache headers
+  so a regenerated `dispatch.json` is not served stale for the judging window.
+  `.github/workflows/ci.yml` runs tests, schema validation, a check that the published artifact
+  matches the pipeline output, and the frontend build. [`DEPLOY.md`](./DEPLOY.md) has the steps.
+- **`VisionEvidence` mixed-content bug fixed.** It defaulted to `http://127.0.0.1:8000` and rendered
+  unconditionally, so on an HTTPS deployment it would have failed for every judge. Localhost is now a
+  DEV-only default and is dead-code-eliminated from production builds; the panel hides when no service
+  is configured. Local M5 work is unchanged.
+- **Corrected our own published figures.** The M2 numbers first written down were from before the
+  fleet tilt was set to 10°. Now R² **0.9008**, MAE **17.57 %**, nRMSE **28.25 %**, derate **0.804**,
+  fixed in every file that quoted them.
+- Removed the stray empty root `package-lock.json`, which belonged to nothing and could confuse
+  monorepo build detection.
+
+**Still open, and the first one is worth more than everything above:** the repo is **still 404 to the
+public**, which scores as non-submission; there is no live URL yet (config exists, needs the Vercel
+import); and the deck and summary still describe PRD v1.
+
 ### 30 Aug 2026 — M2 and M3 shipped; 23 placeholders down to 1
 
 Branch `feat/m2-m3-baseline-detector`. Full method: [`docs/M2-M3-METHOD.md`](./docs/M2-M3-METHOD.md).
 
 - **M2 sensor-free baseline built.** NASA POWER hourly irradiance → pvlib (Erbs → Hay-Davies →
-  SAPM cell temperature → PVWatts). **R² 0.8925, MAE 17.80 %, nRMSE 28.33 %** over 2,314 analysed
+  SAPM cell temperature → PVWatts). **R² 0.9008, MAE 17.57 %, nRMSE 28.25 %** over 2,314 analysed
   site-days. One free parameter — the system derate — calibrated **fleet-wide, never per site**,
-  because a per-site fit absorbs the fault it is supposed to reveal. Measured 0.798, moves only to
+  because a per-site fit absorbs the fault it is supposed to reveal. Measured 0.804, moves only to
   0.758–0.780 under ten deliberately contaminated runs.
 - **M3 peer benchmarking built.** Robust peer-deviation z-score (Iglewicz-Hoaglin modified z-score,
   median/MAD) on a reference-normalised performance ratio. **Precision 86.7 %, recall 65.0 %,
@@ -112,8 +147,9 @@ Branch `feat/m2-m3-baseline-detector`. Full method: [`docs/M2-M3-METHOD.md`](./d
 - **`pipeline/requirements.txt`** gained pvlib and scipy. It had uncommitted M5 additions in the
   working tree from someone else's session; those were preserved, not overwritten.
 
-**Still open and not mine:** the repo is still 404 to the public, there is no deploy config of any
-kind, and `VisionEvidence` posts to `127.0.0.1:8000` from a screen that will be served over HTTPS.
+**Still open at the time of this entry:** the repo is still 404 to the public, there is no deploy
+config of any kind, and `VisionEvidence` posts to `127.0.0.1:8000` from a screen that will be
+served over HTTPS. The next entry closes the last two.
 
 ### 19 Aug 2026 — tariff sourced, fleet corrected, two decisions closed
 

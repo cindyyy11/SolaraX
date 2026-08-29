@@ -64,7 +64,7 @@ Per the announcement these may be added or updated any time before the lock.
 | Deliverable | Module | Status |
 |---|---|---|
 | Cleaned multi-site dataset + preprocessing script | M1 | ✅ 11 sites, 2 cohorts, 233 days. `pipeline/fetch_pvdaq.py` |
-| Baseline model with documented formula | M2 | ✅ **Built.** pvlib on NASA POWER, R² 0.89, MAE 17.8%. Formula + hand-calculated check in [`docs/M2-M3-METHOD.md`](../docs/M2-M3-METHOD.md) |
+| Baseline model with documented formula | M2 | ✅ **Built.** pvlib on NASA POWER, R² 0.90, MAE 17.6%. Formula + hand-calculated check in [`docs/M2-M3-METHOD.md`](../docs/M2-M3-METHOD.md) |
 | Peer-benchmarking detector with a stated accuracy figure from a real test | M3 | ✅ **Built.** Precision 86.7%, recall 65.0% on 100 held-out site-runs. `pipeline/output/detector_accuracy.json` |
 | Economic ranking config, every assumption named and sourced | M4 | ✅ `config/assumptions.json`, RP4 sourced to ST. Loss input is now measured, not assumed |
 | Image classifier with stated accuracy + SIMULATED labelling | M5 | ⬜ |

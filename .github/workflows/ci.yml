@@ -1,0 +1,90 @@
+# CI — prove the repo does what it says on a machine that is not ours.
+#
+# WHY THIS EXISTS. Two of the red-team checks in hinfo/SUBMISSION-CHECKLIST.md
+# are really reproducibility questions: does the pipeline run from a clean
+# checkout, and does the artifact the dashboard serves still conform to the
+# frozen schema. Answering them by hand on a laptop that already has everything
+# installed answers a different, easier question.
+#
+# It deliberately does NOT regenerate dispatch.json on a schedule. That would
+# depend on NASA POWER and the PVDAQ S3 bucket being reachable, and a failure
+# during the judging window would replace a working committed artifact with a
+# broken one. See DEPLOY.md and ARCHITECTURE-PLAN.md section 3.5.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    name: Pipeline — tests and schema conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 3.12 rather than 3.11: the M5 vision lane needs a torch wheel and
+          # pipeline/requirements.txt records 3.12 as the verified version.
+          python-version: '3.12'
+          cache: pip
+
+      # The vision lane pulls torch — several hundred MB — and nothing in the
+      # BATCH pipeline imports it. Installing only what the tested code needs
+      # keeps this job to well under a minute.
+      - name: Install pipeline dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 pandas pyarrow pvlib scipy pytest
+
+      - name: Run the pipeline test suite
+        run: python -m pytest pipeline/ -q
+
+      - name: Validate the committed dispatch.json against the frozen schema
+        run: python pipeline/validate_dispatch.py
+
+      # The artifact the dashboard serves and the one the pipeline wrote must be
+      # the same file. They are published by generate_dispatch.py and it is easy
+      # to commit one without the other, which shows up as a dashboard quietly
+      # serving last week's numbers.
+      - name: Check the published artifact matches the pipeline output
+        run: |
+          python - <<'PY'
+          import json, sys
+          canonical = json.load(open('pipeline/output/dispatch.json', encoding='utf-8'))
+          for published in ('apps/web/public/dispatch.json',
+                           'apps/web/public/dispatch.mock.json'):
+              if json.load(open(published, encoding='utf-8')) != canonical:
+                  sys.exit('{} has drifted from pipeline/output/dispatch.json. '
+                           'Re-run pipeline/generate_dispatch.py and commit both.'
+                           .format(published))
+          print('published artifacts match the pipeline output')
+          PY
+
+  frontend:
+    name: Frontend — type-check and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - run: npm ci
+
+      # `npm run build` runs type-check and build-only in parallel, so this
+      # covers both. A type error fails the job.
+      - run: npm run build

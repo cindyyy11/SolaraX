@@ -154,12 +154,38 @@ export interface VisionPrediction {
   evidence: VisionEvidencePayload
 }
 
-const VISION_API_URL =
-  import.meta.env.VITE_VISION_API_URL ?? 'http://127.0.0.1:8000'
+/**
+ * Base URL for the M5 vision service, or null when there isn't one.
+ *
+ * WHY THIS IS NOT A CONSTANT WITH A LOCALHOST DEFAULT. It used to be
+ * `import.meta.env.VITE_VISION_API_URL ?? 'http://127.0.0.1:8000'`, which is
+ * correct on a developer's machine and broken everywhere else. A deployed
+ * dashboard is served over HTTPS, and a browser refuses a plaintext request to
+ * 127.0.0.1 from an HTTPS page as mixed content — so on the public URL the
+ * upload panel rendered, accepted a file, and then failed for every visitor.
+ * The one screen with a live model demo was the one screen guaranteed to break
+ * in front of a judge.
+ *
+ * Localhost stays the default in DEV only, so `npm run dev` still works with no
+ * setup. In a production build the panel is hidden unless VITE_VISION_API_URL is
+ * explicitly set to a reachable HTTPS endpoint.
+ */
+export const VISION_API_URL: string | null =
+  import.meta.env.VITE_VISION_API_URL ??
+  (import.meta.env.DEV ? 'http://127.0.0.1:8000' : null)
+
+/** Whether the vision panel has somewhere to post to. Components gate on this. */
+export const isVisionApiConfigured = (): boolean => Boolean(VISION_API_URL)
 
 export async function predictVision(
   image: File,
 ): Promise<VisionPrediction> {
+  if (!VISION_API_URL) {
+    throw new Error(
+      'No vision service is configured. Set VITE_VISION_API_URL to enable image analysis.',
+    )
+  }
+
   const formData = new FormData()
 
   // Must be called "image" because FastAPI expects:

@@ -23,7 +23,7 @@ weather, a dip only one site has is a fault.**
 
 ## Why the second sentence is the one that matters
 
-M2's baseline carries real error — **17.8 % mean absolute error on a single site-day** (measured,
+M2's baseline carries real error — **17.6 % mean absolute error on a single site-day** (measured,
 below). That is not good enough on its own to call a 15 % fault, and no amount of model polish fixes
 it, because the error comes from NASA POWER resolving cloud timing across a ~50 km grid cell.
 
@@ -72,7 +72,7 @@ genuinely faulty site gets a lower derate and is then declared healthy against i
 One fleet median cannot do that — it is robust to a minority of degraded site-days by construction,
 and `test_baseline.py` pins exactly that: two of five sites losing 40 % must not move it at all.
 
-**Measured derate: 0.798.** Across ten injected runs — each with four faults multiplied into the
+**Measured derate: 0.804.** Across ten injected runs — each with four faults multiplied into the
 fleet — it moves only to 0.758–0.780. That ~3 % drift under deliberate contamination is the check
 that the robustness claim holds, rather than an assertion that it does.
 
@@ -86,12 +86,12 @@ Against 2,314 analysed site-days (S-1367 excluded — see below):
 
 | | |
 |---|---|
-| Mean bias error | −5.89 % |
-| Median bias error | 0.00 % |
-| **Mean absolute error** | **17.80 %** |
-| Normalised RMSE | 28.33 % |
-| RMSE | 100.7 kWh/day |
-| R² | **0.8925** |
+| Mean bias error | −5.47 % |
+| Median bias error | −0.00 % |
+| **Mean absolute error** | **17.57 %** |
+| Normalised RMSE | 28.25 % |
+| RMSE | 96.7 kWh/day |
+| R² | **0.9008** |
 
 Reproduce with `python pipeline/baseline.py --per-site`.
 

@@ -67,3 +67,7 @@ desktop.ini
 *.log
 tmp/
 scratch/
+
+# Stray root lockfile. The only npm project is apps/web; an empty lockfile at
+# the root confuses monorepo build detection and belongs to nothing.
+/package-lock.json

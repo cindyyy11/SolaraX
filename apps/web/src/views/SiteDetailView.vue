@@ -16,7 +16,14 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { loadDispatch, findSite, findCohort, formatRinggit, formatCapacity } from '@/services/api'
+import {
+  loadDispatch,
+  findSite,
+  findCohort,
+  formatRinggit,
+  formatCapacity,
+  isVisionApiConfigured,
+} from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import CohortChart from '@/components/CohortChart.vue'
@@ -27,6 +34,9 @@ import VisionEvidence from '@/components/VisionEvidence.vue'
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
 const isLoading = ref(true)
+
+/** Whether an M5 vision service is reachable from wherever this is served. */
+const visionAvailable = isVisionApiConfigured()
 
 onMounted(async () => {
   const result = await loadDispatch()
@@ -151,8 +161,16 @@ const cohort = computed(() => {
         <InverterThermalMap :sub-site="site.sub_site" :evidence="site.evidence" />
       </section>
 
-      <!-- Block 5 — CV evidence for flagged sites. -->
-      <section v-if="site.detection" class="block">
+      <!--
+        Block 5 — CV evidence for flagged sites.
+
+        Gated on a configured vision service as well as on detection. The panel
+        posts an uploaded image to a live endpoint, and a deployed dashboard is
+        served over HTTPS: without a reachable HTTPS service there is nothing for
+        it to talk to, and rendering an upload box that always fails is worse
+        than rendering nothing. See VISION_API_URL in services/api.ts.
+      -->
+      <section v-if="site.detection && visionAvailable" class="block">
         <VisionEvidence />
       </section>
 
