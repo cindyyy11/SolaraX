@@ -1,0 +1,80 @@
+{
+  "data_status": "SIMULATED",
+  "question": "Does the peer-deviation detector improve as the number of peers in a cohort grows? Rubric: Scalability, 15%.",
+  "note": "Real PVDAQ measurements with synthetic faults injected by pipeline/fault_injection.py. Cohorts are shrunk by enumerating every subset of each size; only the peer comparison is recomputed, never the M2 baseline.",
+  "seeds": [
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59
+  ],
+  "seeds_are_held_out": true,
+  "subsets_evaluated": {
+    "50": 32,
+    "51": 32,
+    "52": 32,
+    "53": 32,
+    "54": 32,
+    "55": 32,
+    "56": 32,
+    "57": 32,
+    "58": 32,
+    "59": 32
+  },
+  "headline_metric": "roc_auc",
+  "headline_metric_note": "Threshold-free by design. The -0.5 operating point was calibrated at cohort size 5, so a threshold-dependent metric alone would partly measure that mismatch rather than the method's information content.",
+  "ceiling": "The largest analysed cohort in this fleet is 5 sites. This is a measured trend across 3-5 peers, not a demonstration at fleet scale. The contamination mechanism explains why it continues; the data does not reach that far.",
+  "by_cohort_size": {
+    "3": {
+      "site_evaluations": 600,
+      "faulted": 240,
+      "controls": 360,
+      "roc_auc": 0.8553,
+      "precision": 0.8425,
+      "recall": 0.5125,
+      "false_positive_rate": 0.0639,
+      "true_positive": 123,
+      "false_negative": 117,
+      "false_positive": 23,
+      "true_negative": 337,
+      "median_cohort_mad": 0.0766,
+      "contamination_note": "one fault in a 3-site cohort is 33% of the sample; MAD breaks down at 50%"
+    },
+    "4": {
+      "site_evaluations": 400,
+      "faulted": 160,
+      "controls": 240,
+      "roc_auc": 0.8975,
+      "precision": 0.782,
+      "recall": 0.65,
+      "false_positive_rate": 0.1208,
+      "true_positive": 104,
+      "false_negative": 56,
+      "false_positive": 29,
+      "true_negative": 211,
+      "median_cohort_mad": 0.0899,
+      "contamination_note": "one fault in a 4-site cohort is 25% of the sample; MAD breaks down at 50%"
+    },
+    "5": {
+      "site_evaluations": 100,
+      "faulted": 40,
+      "controls": 60,
+      "roc_auc": 0.9129,
+      "precision": 0.8667,
+      "recall": 0.65,
+      "false_positive_rate": 0.0667,
+      "true_positive": 26,
+      "false_negative": 14,
+      "false_positive": 4,
+      "true_negative": 56,
+      "median_cohort_mad": 0.1077,
+      "contamination_note": "one fault in a 5-site cohort is 20% of the sample; MAD breaks down at 50%"
+    }
+  }
+}

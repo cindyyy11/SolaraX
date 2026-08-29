@@ -165,7 +165,11 @@ export interface Hypothesis {
   photograph?: string[]
 }
 
-/** One row per site per day. `expected_kwh` is null until M2 (owner A) lands. */
+/**
+ * One row per site per day. `expected_kwh` comes from M2's sensor-free baseline.
+ * It stays null on any day the baseline could not produce a value for — a gap in
+ * the expected line is the truthful rendering of a day we could not predict.
+ */
 export interface ActualVsExpectedRow {
   date: string
   actual_kwh: number
