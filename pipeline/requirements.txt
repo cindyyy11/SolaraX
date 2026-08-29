@@ -2,8 +2,8 @@
 #
 #   pip install -r pipeline/requirements.txt
 #
-# Only three, deliberately. Everything else the pipeline uses is Python
-# standard library (csv, json, datetime, concurrent.futures, argparse, re).
+# Four, and three of them cover ingestion alone. Everything else the pipeline
+# uses is Python standard library (csv, json, datetime, concurrent.futures, argparse, re).
 #
 # Verified working on Python 3.14.3 at the versions noted below. Minimums are
 # floors rather than exact pins so a teammate on a slightly different Python can
@@ -21,8 +21,17 @@ pandas>=2.2            # tested: 2.3.3
 # and every intermediate in data/processed/ is parquet.
 pyarrow>=15.0          # tested: 23.0.1
 
+# Solar position, irradiance decomposition and transposition, cell temperature
+# and the PVWatts DC model — the M2 baseline chain in pipeline/baseline.py.
+#
+# NEEDED ONLY FOR M2. pipeline/detect_cohort.py (M3, the detector every ringgit
+# figure depends on) is stdlib-only and imports nothing from here. The pipeline
+# generates a complete, valid dispatch.json with pvlib absent — expected_kwh is
+# simply null and irradiance_source reads NONE, both of which the schema
+# supports. Install it to get the cross-check, not to get a working product.
+pvlib>=0.13            # tested: 0.15.2
+
 # --- NOT pinned here, on purpose --------------------------------------------
-# pvlib and scikit-learn belong to M2/M3 (owner A). When A adds them, add them
-# below with their own tested versions. Keeping them out until they are actually
-# used means a clean checkout installs in seconds rather than pulling a large
-# scientific stack nobody is running yet.
+# scikit-learn is still unused. The detector is median/MAD arithmetic on the
+# standard library, which needs no ML stack. Add it only when something
+# actually imports it.

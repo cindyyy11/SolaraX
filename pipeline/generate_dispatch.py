@@ -7,16 +7,20 @@ Run:
 WHAT THIS DOES AND DOES NOT DO
 ------------------------------
 This module assembles the `dispatch.json` shape defined in docs/Schema.md. It is
-deliberately NOT an implementation of M2, M3 or M5:
+deliberately NOT an implementation of M5:
 
-    M2 (expected-output baseline)  -> owner A. `expected_kwh` is emitted as null.
-    M3 (cohort detection)          -> owner A. Scoring here is a PLACEHOLDER.
+    M2 (expected-output baseline)  -> BUILT. `expected_kwh` comes from
+                                      pipeline/baseline.py (NASA POWER + pvlib).
+                                      Absent parquet, the field stays null —
+                                      a supported state, not a broken one.
+    M3 (cohort detection)          -> BUILT. Scoring lives in detect_cohort.py
+                                      and this module only renders its output.
     M5 (computer vision)           -> owner B. No `evidence` block is emitted.
 
-Every value those modules will eventually own is marked `data_status:
-"PLACEHOLDER"` so `validate_dispatch.py` can list what still has to be replaced
-before submission. Replacing the internals of this file is the intended workflow
-— see `write_dispatch_file` at the bottom, which is the interface to preserve.
+Anything still owned by an unbuilt module is marked `data_status:
+"PLACEHOLDER"` so `validate_dispatch.py` can list what has to be replaced before
+submission. Replacing the internals of this file is the intended workflow — see
+`write_dispatch_file` at the bottom, which is the interface to preserve.
 
 REAL DATA
 ---------
@@ -33,6 +37,15 @@ import datetime
 import json
 import math
 import os
+import sys
+
+# The pipeline modules import each other by bare name, so the directory has to
+# be importable regardless of the caller's working directory. Without this,
+# `import generate_dispatch` from anywhere else raises ModuleNotFoundError on
+# detect_cohort — which the FastAPI layer (M7) would hit immediately.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import detect_cohort
 
 # --- Paths ------------------------------------------------------------------
 
@@ -51,10 +64,14 @@ FRONTEND_PUBLIC_DIR = os.path.join(REPOSITORY_ROOT, "apps", "web", "public")
 # These are not commercial constants (those live in config/assumptions.json).
 # They describe the shape of the artifact and the date axis.
 
-SCHEMA_VERSION = "1.6.0"
-PIPELINE_VERSION = "0.4.0-placeholder"
+SCHEMA_VERSION = "1.7.0"
+PIPELINE_VERSION = "0.5.0-m2-m3"
 
 SERIES_DAY_COUNT = 90          # docs/Schema.md section 8.6
+
+# Extra days plotted beyond a divergence start so the marker is not flush
+# against the left edge of the chart.
+SERIES_MARKER_MARGIN_DAYS = 14
 REPORTING_MONTH = "2026-08"
 REPORTING_MONTH_LABEL = "August 2026"
 SERIES_END_DATE = datetime.date(2026, 8, 16)
@@ -64,28 +81,6 @@ SERIES_END_DATE = datetime.date(2026, 8, 16)
 # docs/Schema.md section 9. Applied once, here, and nowhere else.
 DATE_REMAP_SOURCE_YEAR = 2019
 DATE_REMAP_TARGET_YEAR = 2026
-
-# --- PLACEHOLDER detection --------------------------------------------------
-# TODO(owner A, M3): delete this block entirely. Real cohort clustering and
-# peer-deviation scoring replace it. These site ids are chosen only so the four
-# screens have something to render; they carry no analytical meaning whatsoever.
-
-PLACEHOLDER_DISPATCH_SITE_IDS = ["1203", "34", "1367"]
-PLACEHOLDER_MONITOR_SITE_IDS = ["1199", "1278"]
-
-# Scaffolding loss fractions, chosen so the four screens render a coherent
-# queue and nothing more. Arbitrary and labelled as such — but ARBITRARY AND
-# FIXED beats derived-from-the-threshold, which silently made every site's loss
-# identical. M3 replaces both.
-# 0.25 is a plausible magnitude for a serious fault, and it is also close to the
-# floor at which the smallest dispatch-tier site still clears the threshold under
-# the PESSIMISTIC tariff (RM 0.3649): 146.64 kWp needs ~0.246 to survive that
-# corner. Below it, Screen 4's own toggle would contradict its own dispatch list.
-PLACEHOLDER_DISPATCH_LOSS_FRACTION = 0.25
-PLACEHOLDER_MONITOR_LOSS_FRACTION = 0.08
-
-PLACEHOLDER_DETECTION_METHOD = "PLACEHOLDER — cohort mean deviation, to be replaced by M3 (owner A)"
-PLACEHOLDER_CLUSTERING_METHOD = "PLACEHOLDER — cohort_id read from config/fleet_sites.csv, to be replaced by M3 (owner A)"
 
 COHORT_LABELS = {
     "DSUN-01": "Mid-Atlantic distributed cluster",
@@ -117,6 +112,7 @@ def load_fleet_sites():
             "lon": float(row["lon"]),
             "capacity_kwp": float(row["capacity_kwp"]),
             "cohort_id": row["cohort_id"].strip() or None,
+            "climate_zone": (row.get("kg_climate") or "").strip() or None,
         })
     return sites
 
@@ -383,6 +379,35 @@ def mean_performance_index(series):
     return sum(values) / len(values)
 
 
+BASELINE_DAILY_PATH = os.path.join(REPOSITORY_ROOT, "data", "processed",
+                                   "baseline_daily.parquet")
+
+
+def load_expected_daily(path=None):
+    """M2's modelled expected kWh, keyed {site_id: {date: kwh}}.
+
+    Returns None when the baseline has not been built, in which case
+    `expected_kwh` stays null and the frontend draws the actual line alone —
+    the behaviour docs/Schema.md section 8.6 already specifies. M3 does not
+    consult this at all; nothing about detection changes whether it exists.
+    """
+    path = path or BASELINE_DAILY_PATH
+    if not os.path.exists(path):
+        return None
+    try:
+        import pandas
+    except ImportError:
+        return None
+
+    frame = pandas.read_parquet(path)
+    expected = {}
+    for record in frame.to_dict("records"):
+        site_id = str(record["site_id"])
+        expected.setdefault(site_id, {})[remap_date(str(record["date"]))] = round(
+            float(record["expected_kwh"]), 2)
+    return expected
+
+
 def build_exclusions(sites, real_series_by_site, assumptions):
     """Identify sites whose telemetry is too incomplete to analyse.
 
@@ -485,17 +510,38 @@ def placeholder_performance_index(site, day_index, assumptions, is_degraded):
     return round(value, 3)
 
 
-def build_actual_vs_expected(site, assumptions, is_degraded, real_series):
-    """Screen 2's primary chart. `expected_kwh` is null until M2 (owner A) lands."""
+def series_window(days_since=None):
+    """How many trailing days the charts carry.
+
+    Normally SERIES_DAY_COUNT. Widened when a divergence started before that,
+    because Screen 2 draws its reference line at `divergence.start_date` and
+    ECharts drops a markLine that falls outside the plotted range — silently.
+    The product would lose the divergence marker and the loss label on the one
+    chart PRD v2 section 4 calls the visual that sells it, with no error.
+    """
+    if not days_since:
+        return SERIES_DAY_COUNT
+    return max(SERIES_DAY_COUNT, int(days_since) + SERIES_MARKER_MARGIN_DAYS)
+
+
+def build_actual_vs_expected(site, assumptions, is_degraded, real_series,
+                             days_since=None, expected_by_date=None):
+    """Screen 2's primary chart.
+
+    `expected_kwh` is M2's modelled output for that site-day, or null when the
+    baseline has not been built. Null is a supported state, not a broken one.
+    """
+    window = series_window(days_since)
+    expected_by_date = expected_by_date or {}
     if real_series is not None:
         return [
             {
                 "date": row["date"],
                 "actual_kwh": row["actual_kwh"],
-                "expected_kwh": None,
+                "expected_kwh": expected_by_date.get(row["date"]),
                 "performance_index": row["performance_index"],
             }
-            for row in real_series[-SERIES_DAY_COUNT:]
+            for row in real_series[-window:]
         ]
 
     rows = []
@@ -511,13 +557,14 @@ def build_actual_vs_expected(site, assumptions, is_degraded, real_series):
 
 
 def build_cohort_series(subject_site, cohort_members, assumptions, degraded_site_ids,
-                        real_series_by_site, exclusions=None):
+                        real_series_by_site, exclusions=None, days_since=None):
     """Long format, one row per peer per day.
 
     This is the array behind the chart PRD v2 section 4 calls "the visual that
     sells the whole product". Long, never wide — see docs/Schema.md section 8.6.
     """
     exclusions = exclusions or {}
+    window = series_window(days_since)
     rows = []
     for member in cohort_members:
         member_site_id = build_site_id(member["source_system_id"])
@@ -536,7 +583,7 @@ def build_cohort_series(subject_site, cohort_members, assumptions, degraded_site
             real_series = real_series_by_site.get(member_site_id)
 
         if real_series is not None:
-            for row in real_series[-SERIES_DAY_COUNT:]:
+            for row in real_series[-window:]:
                 rows.append({
                     "date": row["date"],
                     "site_id": member_site_id,
@@ -559,59 +606,77 @@ def build_cohort_series(subject_site, cohort_members, assumptions, degraded_site
 # --- PLACEHOLDER analytics --------------------------------------------------
 
 
-def build_detection(cohort_size, meets_minimum, severity):
-    """TODO(owner A, M3): replace wholesale. Nothing here is a real measurement."""
+def build_detection(result, data_status="BUILT"):
+    """M3's output for one site, rendered into the schema shape.
+
+    Every field is measured. `score` is the median Iglewicz-Hoaglin modified
+    z-score across the trailing window, signed so that negative means below the
+    cohort; `threshold` travels with it because a score is unreadable without
+    the line it is being judged against.
+    """
     return {
-        "method": PLACEHOLDER_DETECTION_METHOD,
-        "score": round(-2.0 - severity * 1.8, 2),
-        "score_type": "cohort_mean_deviation",
-        "threshold": -2.0,
-        "confidence": round(0.60 + severity * 0.25, 2),
-        "cohort_size": cohort_size,
-        "cohort_meets_minimum": meets_minimum,
-        "data_status": "PLACEHOLDER",
+        "method": result["method"],
+        "score": result["score"],
+        "score_type": result["score_type"],
+        "threshold": result["threshold"],
+        "confidence": result["confidence"],
+        # The persistence evidence, stated as a count rather than implied. For a
+        # flagged site this is why it is flagged; for a cleared site "0 of the
+        # last 14" is the clearest form the clearance can take. Additive in
+        # schema 1.7.0 — see docs/Schema.md 8.2.
+        "breach_days": result["breach_days"],
+        "window_days": result["window_days"],
+        "cohort_size": result["cohort_size"],
+        "cohort_meets_minimum": result["cohort_meets_minimum"],
+        "data_status": data_status,
     }
 
 
-def build_divergence(severity):
-    """Screen 2 draws its vertical reference line at `start_date`."""
-    days_since = int(12 + severity * 30)
-    start_date = SERIES_END_DATE - datetime.timedelta(days=days_since)
+# Confidence is a float on 0..1; Screen 2 wants a word. These are the cut
+# points that turn one into the other, named rather than inlined so the label
+# on screen and the number behind it cannot drift apart.
+CONFIDENCE_HIGH = 0.66
+CONFIDENCE_MEDIUM = 0.33
+
+
+def confidence_label(confidence):
+    if confidence >= CONFIDENCE_HIGH:
+        return "high"
+    if confidence >= CONFIDENCE_MEDIUM:
+        return "medium"
+    return "low"
+
+
+def build_divergence(result):
+    """Screen 2 draws its vertical reference line at `start_date`.
+
+    The date is the first day of the current divergence episode as measured by
+    the detector, not a date derived from how bad the site looks.
+    """
     return {
-        "start_date": start_date.isoformat(),
-        "days_since": days_since,
-        "detection_confidence": "high" if severity > 0.5 else "medium",
+        "start_date": result["divergence_start"],
+        "days_since": result["days_since"],
+        "detection_confidence": confidence_label(result["confidence"]),
     }
 
 
-def build_economics(site, assumptions, divergence, severity, exceeds_threshold):
-    """Every number derives from config/assumptions.json. No constant is hardcoded.
+def build_economics(assumptions, result, exceeds_threshold=None, data_status="BUILT"):
+    """Money at risk, derived from the detector's measured kWh shortfall.
 
-    TODO(owner A, M2/M3): kwh_lost_monthly currently comes from a placeholder
-    loss fraction. It should come from (cohort_median_PI - site_PI) x expected_kwh.
+    The chain has no free parameters left in it:
+
+        daily shortfall  = (cohort_median_PI - site_PI) x capacity_kwp   [M3]
+        kwh_lost_monthly = mean daily shortfall x 30                     [M3]
+        rm_at_risk       = kwh_lost_monthly x tariff_rm_per_kwh          [config]
+
+    `loss_pct_of_expected` is the mean fractional shortfall against the cohort
+    median over the episode — a measurement now, where it was previously a
+    stated constant chosen so the screens rendered coherently.
     """
     tariff = assumptions["tariff_rm_per_kwh"]
-    nominal_yield = assumptions["assumed_yield_kwh_per_kwp_day"]
 
-    expected_monthly_kwh = site["capacity_kwp"] * nominal_yield * 30
-
-    # PLACEHOLDER severity. TODO(owner A, M3): delete — the real loss is
-    # (cohort_median_PI - site_PI) x expected_kwh.
-    #
-    # A STATED FRACTION, not one derived from the threshold. Deriving it from
-    # the threshold made rm_at_risk equal 1.15 x threshold for EVERY site, so
-    # the loss stopped being a property of the site: the dispatch ranking came
-    # down to 4th-decimal rounding, a monitor site showed worse fractional loss
-    # than a dispatch site, and fleet ESG rose 41% while the fleet lost 54% of
-    # its capacity. Money must follow the site; status then follows money.
-    loss_fraction = (PLACEHOLDER_DISPATCH_LOSS_FRACTION if severity >= 0.5
-                     else PLACEHOLDER_MONITOR_LOSS_FRACTION)
-
-    kwh_lost_monthly = round(expected_monthly_kwh * loss_fraction, 1)
-
-    days_since = divergence["days_since"]
-    cumulative_kwh_lost = round(kwh_lost_monthly / 30 * days_since, 1)
-
+    kwh_lost_monthly = result["kwh_lost_monthly"]
+    cumulative_kwh_lost = result["cumulative_kwh_lost"]
     rm_at_risk_monthly = round(kwh_lost_monthly * tariff, 2)
 
     # Derived, not asserted. A site is worth visiting when the monthly loss
@@ -627,39 +692,92 @@ def build_economics(site, assumptions, divergence, severity, exceeds_threshold):
         "rm_at_risk_monthly": rm_at_risk_monthly,
         "cumulative_kwh_lost": cumulative_kwh_lost,
         "cumulative_loss_rm": round(cumulative_kwh_lost * tariff, 2),
-        "loss_pct_of_expected": loss_fraction,
+        "loss_pct_of_expected": result["loss_fraction"],
         "exceeds_dispatch_threshold": exceeds_threshold,
         "calculation": "kwh_lost_monthly × tariff_rm_per_kwh",
-        "data_status": "PLACEHOLDER",
+        "data_status": data_status,
     }
 
 
-def build_hypothesis(site, cohort_label, cohort_size, severity, is_dispatch):
+# What each detected signal shape points a technician at first. The shape is
+# measured from the deficit series by detect_cohort.classify_shape; these are
+# the checks that follow from it. Keyed by shape so adding a shape forces a
+# matching entry rather than silently falling through to generic advice.
+SHAPE_GUIDANCE = {
+    "step": {
+        "cause": "output dropped to a new level and stayed there, which points at "
+                 "something switched off rather than something accumulating",
+        "checks": [
+            "Inspect combiner box for tripped string breakers",
+            "Verify string-level currents against inverter readings",
+            "Check inverter event log for a fault code at the divergence date",
+        ],
+    },
+    "ramp": {
+        "cause": "output is drifting further below the cohort week by week, which "
+                 "points at something accumulating rather than a discrete failure",
+        "checks": [
+            "Check module surfaces for soiling and staining",
+            "Look for new shading — vegetation growth or adjacent construction",
+            "Compare against the last cleaning date on record",
+        ],
+    },
+    "intermittent": {
+        "cause": "output falls away and recovers rather than sitting low, which "
+                 "points at something cycling rather than a failed component",
+        "checks": [
+            "Check inverter temperature derating during peak hours",
+            "Review the event log for repeated trips and restarts",
+            "Confirm whether the site was curtailed on the affected days",
+        ],
+    },
+    "unknown": {
+        "cause": "the divergence is too short so far to show a shape",
+        "checks": [
+            "Inspect combiner box for tripped string breakers",
+            "Check module surfaces for soiling and shading",
+            "Re-assess once more days have accumulated",
+        ],
+    },
+}
+
+
+def build_hypothesis(site, cohort_label, result, is_dispatch):
     """Feeds Screen 2's explanation panel and Screen 3's work order.
 
-    TODO(owner A, M3): the cause hypothesis should follow from the detected
-    signal shape, not from a severity number.
+    The cause statement follows from the DETECTED SIGNAL SHAPE, not from a
+    severity number: a step, a ramp and an intermittent fault send a technician
+    to look at three different things. `shape` is evidence about what to check
+    first — detect_cohort.classify_shape documents why it is not a diagnosis.
     """
-    # Trim the trailing noun so "Greater Las Vegas cluster" reads as
-    # "6-site Greater Las Vegas cohort" rather than "6-site Greater cohort".
     cohort_name = cohort_label
     for trailing in (" cluster", " cohort"):
         if cohort_name.endswith(trailing):
             cohort_name = cohort_name[: -len(trailing)]
+
+    cohort_size = result["cohort_size"]
     summary = "Divergence from {}-site {} cohort".format(cohort_size, cohort_name)
+
+    guidance = SHAPE_GUIDANCE.get(result.get("shape") or "unknown",
+                                  SHAPE_GUIDANCE["unknown"])
+
+    detail = (
+        "{name} tracked its cohort until {start}, then fell below the cohort median "
+        "while its {peers} peers held steady — breaching z={threshold} on {breaches} of "
+        "the last {window} days. Mean shortfall {loss:.1%} against the peer median, "
+        "{kwh:,.0f} kWh/month. Shape since divergence: {shape} — {cause}."
+    ).format(
+        name=site["name"], start=result["divergence_start"],
+        peers=max(cohort_size - 1, 0), threshold=result["threshold"],
+        breaches=result["breach_days"], window=result["window_days"],
+        loss=result["loss_fraction"], kwh=result["kwh_lost_monthly"],
+        shape=result.get("shape") or "unknown", cause=guidance["cause"])
+
     hypothesis = {
         "summary": summary[:90],
-        "detail": (
-            "PLACEHOLDER text. {} tracks its cohort until {}, then sits below the cohort median "
-            "while peers hold steady. A real cause hypothesis requires M3 (owner A); this string "
-            "exists so Screen 2 and Screen 3 can be built against the final shape."
-        ).format(site["name"], build_divergence(severity)["start_date"]),
-        "confidence": round(0.60 + severity * 0.25, 2),
-        "checks": [
-            "Inspect combiner box for tripped string breakers",
-            "Verify string-level currents against inverter readings",
-            "Check for new shading obstruction or surface soiling",
-        ],
+        "detail": detail,
+        "confidence": result["confidence"],
+        "checks": list(guidance["checks"]),
     }
     if is_dispatch:
         hypothesis["photograph"] = [
@@ -680,7 +798,7 @@ def group_sites_by_cohort(sites):
     return grouped
 
 
-def build_cohorts(sites_by_cohort, assumptions, exclusions=None):
+def build_cohorts(sites_by_cohort, assumptions, exclusions=None, detection_summaries=None):
     """One object per cohort. Referenced by site.cohort_id — every reference must resolve.
 
     `analysed_count` excludes data-quality exclusions, and `meets_minimum` is
@@ -689,8 +807,10 @@ def build_cohorts(sites_by_cohort, assumptions, exclusions=None):
     otherwise would overstate the detector's confidence.
     """
     exclusions = exclusions or {}
+    detection_summaries = detection_summaries or {}
     cohorts = []
     for cohort_id in sorted(key for key in sites_by_cohort if key):
+        summary = detection_summaries.get(cohort_id, {})
         members = sites_by_cohort[cohort_id]
         member_site_ids = [build_site_id(member["source_system_id"]) for member in members]
         analysed_site_ids = [
@@ -712,29 +832,72 @@ def build_cohorts(sites_by_cohort, assumptions, exclusions=None):
             "analysed_count": len(analysed_site_ids),
             "excluded_site_ids": excluded_site_ids,
             "meets_minimum": len(analysed_site_ids) >= assumptions["min_cohort_size"],
-            "clustering_method": PLACEHOLDER_CLUSTERING_METHOD,
+            "clustering_method": summary.get(
+                "clustering_method",
+                "Cohort assigned in config/fleet_sites.csv"),
             "centroid": {"lat": round(centroid_lat, 4), "lon": round(centroid_lon, 4)},
-            "cohort_median_performance_index": assumptions["assumed_yield_kwh_per_kwp_day"],
-            "data_status": "PLACEHOLDER",
+            # The OBSERVED median specific yield across the cohort's analysed
+            # members, in kWh/kWp/day. This was previously the constant
+            # assumed_yield_kwh_per_kwp_day, which made a config assumption
+            # masquerade as a measurement on the one chart the product is
+            # judged by. It is now the median of the cohort's daily medians.
+            # `.get(key, default)` is not enough: the key IS present and set to
+            # None whenever no cohort day was scorable, which would ship a null
+            # next to data_status BUILT and leave Screen 2's reference line with
+            # no value.
+            "cohort_median_performance_index": (
+                summary["median_performance_index"]
+                if summary.get("median_performance_index") is not None
+                else assumptions["assumed_yield_kwh_per_kwp_day"]),
+            # `is not None`, not truthiness: a measured 0.0 is a real — if
+            # alarming — observation about a cohort, and substituting a config
+            # constant for it would hide exactly the situation worth seeing.
+            "data_status": ("BUILT"
+                            if summary.get("median_performance_index") is not None
+                            else "PLACEHOLDER"),
         })
     return cohorts
 
 
-def classify_site(source_system_id):
-    """PLACEHOLDER triage. TODO(owner A, M3): the detector decides this, not a list."""
-    if source_system_id in PLACEHOLDER_DISPATCH_SITE_IDS:
-        return "dispatch"
-    if source_system_id in PLACEHOLDER_MONITOR_SITE_IDS:
-        return "monitor"
-    return "healthy"
+def build_cohort_membership(sites):
+    """Cohort members in the shape detect_cohort expects.
+
+    Keeps the site-id convention (`build_site_id`) on this side of the boundary
+    so the detector never has to know how an id is spelled.
+    """
+    members = {}
+    for site in sites:
+        # group_sites_by_cohort guards this; the new path must too. A blank
+        # cohort_id in the CSV becomes None, which both crashes sorted() on the
+        # mixed key types and would otherwise be scored as a real cohort.
+        if not site.get("cohort_id"):
+            continue
+        members.setdefault(site["cohort_id"], []).append({
+            "site_id": build_site_id(site["source_system_id"]),
+            "capacity_kwp": site["capacity_kwp"],
+            "lat": site["lat"],
+            "lon": site["lon"],
+            "climate_zone": site.get("climate_zone"),
+        })
+    return members
 
 
 def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
                        real_series_by_site, inverter_by_site=None, thermal_by_site=None,
-                       exclusions=None, hardware_by_site=None):
+                       exclusions=None, hardware_by_site=None, detections=None,
+                       expected_by_site=None):
     """Build every site object, ordered dispatch first then monitor then healthy."""
-    degraded_site_ids = set(PLACEHOLDER_DISPATCH_SITE_IDS + PLACEHOLDER_MONITOR_SITE_IDS)
+    detections = detections or {}
     exclusions = exclusions or {}
+
+    # Only consulted by the synthetic fallback series, which is unreachable once
+    # data/processed/fleet_daily.parquet exists. Derived from the detector so
+    # that path stays coherent instead of referring to a hand-written list.
+    degraded_site_ids = {
+        site["source_system_id"] for site in sites
+        if (detections.get(build_site_id(site["source_system_id"])) or {}).get("tier")
+        in ("dispatch", "monitor")
+    }
 
     dispatch_sites = []
     monitor_sites = []
@@ -743,10 +906,15 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
     for site in sites:
         site_key = build_site_id(site["source_system_id"])
         exclusion = exclusions.get(site_key)
+        has_real_series = bool(real_series_by_site and real_series_by_site.get(site_key))
 
         # An excluded site is never flagged, whatever the detector thinks. Its
         # readings are not trustworthy enough to accuse it of anything.
-        status = "healthy" if exclusion else classify_site(site["source_system_id"])
+        detection_result = detections.get(site_key)
+        if exclusion or detection_result is None:
+            status = "healthy"
+        else:
+            status = detection_result["tier"]
         cohort_id = site["cohort_id"]
         cohort = cohorts_by_id.get(cohort_id)
         cohort_members = sites_by_cohort.get(cohort_id, [site])
@@ -763,7 +931,13 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
             "source_system_id": "pvdaq_{}".format(site["source_system_id"]),
             "status": status,
             "rank": None,
-            "data_status": "PLACEHOLDER",
+            # BUILT IS EARNED, NOT ASSUMED. This was hardcoded, which meant a run
+            # with no fleet_daily.parquet — or with pandas absent, which
+            # load_real_daily_series also treats as "no data" — shipped eleven
+            # sites of SYNTHETIC series labelled as measured, and the validator
+            # then reported no placeholders remaining. CLAUDE.md warns installs
+            # can fail on this Python, so that path is reachable.
+            "data_status": ("BUILT" if has_real_series else "PLACEHOLDER"),
             "excluded_from_analysis": exclusion,
         }
 
@@ -778,7 +952,27 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
                 site_object["sub_site"] = sub_site
 
         if status == "healthy":
-            site_object["detection"] = None
+            # A CLEARED SITE STILL SHOWS ITS WORKING.
+            #
+            # The product's actual claim is "these nine do not need a visit this
+            # month", and an empty detail page is no evidence for it. A healthy
+            # site therefore carries the detection block that cleared it — its
+            # score, the threshold it stayed above, and the cohort it was judged
+            # against — plus the peer chart showing it tracking that cohort.
+            #
+            # It carries no divergence, economics or hypothesis, because there
+            # is no divergence to date, no loss to price and nothing to
+            # hypothesise about. Those stay null exactly as before.
+            #
+            # docs/Schema.md 8.2 previously said detection was null for healthy.
+            # Widened deliberately in schema 1.7.0 — see the changelog there.
+            # ...but an EXCLUDED site carries none of it. Its telemetry is not
+            # trustworthy enough to accuse it with, and it is equally not
+            # trustworthy enough to clear it with. It gets no score at all.
+            site_object["detection"] = (
+                build_detection(detection_result, site_object["data_status"])
+                if (detection_result and detection_result.get("scored")
+                    and not exclusion) else None)
             site_object["divergence"] = None
             site_object["economics"] = None
             site_object["hypothesis"] = None
@@ -788,19 +982,25 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
             if exclusion and real_series_by_site and real_series_by_site.get(site_key):
                 site_object["series"] = {
                     "actual_vs_expected": build_actual_vs_expected(
-                        site, assumptions, False, real_series_by_site.get(site_key)),
+                        site, assumptions, False, real_series_by_site.get(site_key),
+                        expected_by_date=(expected_by_site or {}).get(site_key)),
                     "cohort": [],
+                }
+            elif real_series_by_site and real_series_by_site.get(site_key):
+                site_object["series"] = {
+                    "actual_vs_expected": build_actual_vs_expected(
+                        site, assumptions, False, real_series_by_site.get(site_key),
+                        expected_by_date=(expected_by_site or {}).get(site_key)),
+                    "cohort": build_cohort_series(
+                        site, cohort_members, assumptions, degraded_site_ids,
+                        real_series_by_site, exclusions),
                 }
             healthy_sites.append(site_object)
             continue
 
-        # Severity separates dispatch from monitor deterministically.
-        severity = 0.8 if status == "dispatch" else 0.25
-        cohort_size = cohort["member_count"] if cohort else 1
-        meets_minimum = cohort["meets_minimum"] if cohort else False
         cohort_label = cohort["label"] if cohort else "ungrouped"
 
-        divergence = build_divergence(severity)
+        divergence = build_divergence(detection_result)
 
         # exceeds_dispatch_threshold is DERIVED FROM THE MONEY, never from the
         # status. Setting it to (status == "dispatch") made it a restatement of
@@ -809,8 +1009,9 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
         # RP4 tariff correction dropped the rate 11%, both dispatched sites fell
         # below the RM 1500 threshold while still claiming to exceed it, on a
         # screen that prints the threshold.
-        economics = build_economics(site, assumptions, divergence, severity,
-                                    exceeds_threshold=None)
+        economics = build_economics(assumptions, detection_result,
+                                    exceeds_threshold=None,
+                                    data_status=site_object["data_status"])
 
         # STATUS FOLLOWS MONEY. A site whose loss does not clear the cost of
         # going is not a dispatch, whatever the detector thought of it — that is
@@ -821,26 +1022,41 @@ def build_site_objects(sites, cohorts_by_id, sites_by_cohort, assumptions,
         # lower the rate enough and a dispatch becomes a monitor, instead of
         # becoming a dispatch that visibly fails its own threshold on a screen
         # that prints the threshold.
+        # Both directions. Demotion alone left the mirror case unhandled: the
+        # detector assigns monitor on breach COUNT, while loss is measured over
+        # the whole episode, so a large site sitting well below its cohort for
+        # months can clear the money threshold on 6 breach days. That is
+        # "a site worth visiting was not dispatched" — validator rule 11 fails
+        # on it outright, and commercially it is money left on the table with no
+        # explanation. Under the old hardcoded list a monitor was pinned to a
+        # 0.08 loss fraction, so this was unreachable. It is reachable now.
         if status == "dispatch" and not economics["exceeds_dispatch_threshold"]:
             status = "monitor"
             site_object["status"] = status
+        elif status == "monitor" and economics["exceeds_dispatch_threshold"]:
+            status = "dispatch"
+            site_object["status"] = status
 
-        site_object["detection"] = build_detection(cohort_size, meets_minimum, severity)
+        site_object["detection"] = build_detection(detection_result,
+                                                   site_object["data_status"])
         site_object["divergence"] = divergence
         site_object["economics"] = economics
         site_object["hypothesis"] = build_hypothesis(
-            site, cohort_label, cohort_size, severity, is_dispatch=(status == "dispatch"))
+            site, cohort_label, detection_result, is_dispatch=(status == "dispatch"))
 
         real_series = None
         if real_series_by_site is not None:
             real_series = real_series_by_site.get(site_object["site_id"])
 
+        days_since = divergence.get("days_since")
         site_object["series"] = {
             "actual_vs_expected": build_actual_vs_expected(
-                site, assumptions, site["source_system_id"] in degraded_site_ids, real_series),
+                site, assumptions, site["source_system_id"] in degraded_site_ids,
+                real_series, days_since,
+                expected_by_date=(expected_by_site or {}).get(site_key)),
             "cohort": build_cohort_series(
                 site, cohort_members, assumptions, degraded_site_ids,
-                real_series_by_site, exclusions),
+                real_series_by_site, exclusions, days_since),
         }
 
         if status == "dispatch":
@@ -969,7 +1185,7 @@ def build_fleet_summary(site_objects, cohorts, assumptions):
     }
 
 
-def build_roi(fleet_summary, assumptions):
+def build_roi(fleet_summary, assumptions, data_status="BUILT"):
     """Screen 4 figures for the observed period.
 
     WHAT CHANGED AND WHY. This function used to multiply one month by six and
@@ -987,9 +1203,12 @@ def build_roi(fleet_summary, assumptions):
     frozen contract, but it now carries generation AT RISK — nothing has been
     recovered, and `generation_basis` says so.
 
-    Stays PLACEHOLDER until M2/M3 supply a real kwh_lost. Every figure below is
-    arithmetic on a made-up loss fraction; the arithmetic is now honest, the
-    input is not yet.
+    BUILT as of M3. Every figure below is arithmetic on the detector's measured
+    kWh shortfall against the cohort median, at a tariff sourced to the
+    regulator. The remaining caveats — one observed month, no confirmation
+    mechanism, generation at risk rather than recovered — are limits of what has
+    been measured, and each states itself in its own `_basis` field. They are
+    reasons to read the number carefully, not reasons to call it fake.
     """
     period_months = 1
     horizon = assumptions["projection_horizon_months"]
@@ -999,7 +1218,9 @@ def build_roi(fleet_summary, assumptions):
     generation_at_risk_kwh = round(fleet_summary["total_rm_at_risk"] / tariff, 1)
 
     return {
-        "data_status": "PLACEHOLDER",
+        # Inherits the fleet-wide worst case for the same reason meta does: this
+        # is arithmetic on the sites, so it cannot be better-evidenced than they are.
+        "data_status": data_status,
         "period_months": period_months,
 
         # Trips, not sites: the cost is per mobilisation. See build_trip_groups.
@@ -1039,7 +1260,7 @@ def build_roi(fleet_summary, assumptions):
     }
 
 
-def build_meta(site_objects, using_real_data):
+def build_meta(site_objects, using_real_data, irradiance_source="NONE"):
     """Fleet-wide data_status is the worst case across all sites."""
     statuses = {item["data_status"] for item in site_objects}
     if "PLACEHOLDER" in statuses:
@@ -1051,7 +1272,10 @@ def build_meta(site_objects, using_real_data):
 
     source_note = (
         "US systems (NREL PVDAQ). Proves method, not market. See PRD v2 section 8. "
-        "Detection, economics and baseline are PLACEHOLDER pending M2/M3 (owner A)."
+        "Detection and economics are BUILT — peer benchmarking against the cohort "
+        "median, which uses no irradiance input at all. The M2 physics baseline "
+        "shown alongside it is a cross-check from satellite irradiance, never a "
+        "detector input."
     )
     if not using_real_data:
         source_note += " Daily series are PLACEHOLDER — M1 ingestion has not yet run."
@@ -1064,7 +1288,7 @@ def build_meta(site_objects, using_real_data):
         "reporting_month_label": REPORTING_MONTH_LABEL,
         "data_status": fleet_status,
         "data_source": "NREL PVDAQ",
-        "irradiance_source": "NONE",
+        "irradiance_source": irradiance_source,
         "source_note": source_note,
         "date_remapped": True,
         "date_remap_note": (
@@ -1102,6 +1326,7 @@ def build_dispatch_payload(injected=False):
 
     thermal_by_site = load_inverter_thermal()
     hardware_by_site = load_inverter_hardware()
+    expected_by_site = load_expected_daily()
 
     # EXCLUSIONS COME FROM THE PRE-INJECTION SERIES, ALWAYS.
     #
@@ -1118,20 +1343,30 @@ def build_dispatch_payload(injected=False):
     exclusions = build_exclusions(sites, exclusion_series, assumptions)
 
     sites_by_cohort = group_sites_by_cohort(sites)
-    cohorts = build_cohorts(sites_by_cohort, assumptions, exclusions)
+
+    # M3. The detector runs once over the whole fleet and everything downstream
+    # renders what it returned — no module below this line decides who is
+    # flagged, and none of them re-derives a loss figure.
+    detections, detection_summaries = detect_cohort.detect_fleet(
+        real_series_by_site or {}, build_cohort_membership(sites), assumptions, exclusions)
+
+    cohorts = build_cohorts(sites_by_cohort, assumptions, exclusions, detection_summaries)
     cohorts_by_id = {cohort["cohort_id"]: cohort for cohort in cohorts}
 
     site_objects = build_site_objects(
         sites, cohorts_by_id, sites_by_cohort, assumptions,
-        real_series_by_site, inverter_by_site, thermal_by_site, exclusions, hardware_by_site)
+        real_series_by_site, inverter_by_site, thermal_by_site, exclusions,
+        hardware_by_site, detections, expected_by_site)
 
     fleet_summary = build_fleet_summary(site_objects, cohorts, assumptions)
 
     return {
-        "meta": build_meta(site_objects, using_real_data=real_series_by_site is not None),
+        "meta": build_meta(site_objects, using_real_data=real_series_by_site is not None,
+                           irradiance_source=("NASA POWER" if expected_by_site else "NONE")),
         "assumptions": assumptions,
         "fleet_summary": fleet_summary,
-        "roi": build_roi(fleet_summary, assumptions),
+        "roi": build_roi(fleet_summary, assumptions,
+                         "BUILT" if real_series_by_site else "PLACEHOLDER"),
         "cohorts": cohorts,
         "sites": site_objects,
     }
@@ -1140,10 +1375,10 @@ def build_dispatch_payload(injected=False):
 # ===========================================================================
 # STABLE INTERFACE — teammates, preserve this function and this filename.
 #
-# Replace everything above with real M2 / M3 / M4 implementations if you like.
-# What must not change is that running this module writes a schema-conformant
-# dispatch.json to this exact path. The frontend, the Supabase loader and
-# validate_dispatch.py all depend on it and on nothing else in this file.
+# Replace internals above if you like. What must not change is that running
+# this module writes a schema-conformant dispatch.json to this exact path.
+# The frontend, the Supabase loader and validate_dispatch.py all depend on
+# it and on nothing else in this file.
 # ===========================================================================
 
 

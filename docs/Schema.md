@@ -1,6 +1,6 @@
 # SolaraX — `dispatch.json` Schema
 
-**Version:** 1.6.0
+**Version:** 1.7.0
 **Status:** FROZEN as of 15 Aug 2026
 **Owner:** D (Full-Stack)
 **Consumers:** `frontend/src/api.js` (all four screens)
@@ -349,7 +349,7 @@ frontend ignores changes nothing a judge sees.
     "member_site_ids": ["S-001", "S-002", "S-004", "S-007", "S-009", "S-011"],
     "member_count": 6,
     "meets_minimum": true,
-    "clustering_method": "PLACEHOLDER — lat/lon proximity, to be replaced by M3 (owner A)",
+    "clustering_method": "Shared operator and Koppen climate zone Cfa, assigned in config/fleet_sites.csv; members within 162.0 km of each other",
     "centroid": { "lat": 3.0733, "lon": 101.4489 },
     "cohort_median_performance_index": 3.61,
     "data_status": "PLACEHOLDER"
@@ -415,18 +415,40 @@ The main array. One object per site. Ordered by `rank` ascending, healthy sites 
 | `rank` | int \| null | ✅ | 1-based within dispatch group. `null` for healthy sites |
 | `data_status` | enum §2.1 | ✅ | |
 
-### 8.2 `detection` — required for `dispatch` and `monitor`, `null` for `healthy`
+### 8.2 `detection` — required for `dispatch` and `monitor`, also present on cleared sites
+
+> **Widened in 1.7.0.** Through 1.6.0 this block was `null` for every `healthy`
+> site. It is now **also emitted for a healthy site that the detector actually
+> scored and cleared**, carrying the score, the threshold it stayed above, and
+> the cohort it was judged against.
+>
+> The reason is the product's own claim. SolaraX exists to say *"these nine
+> sites do not need a visit this month"*, and a cleared site with an empty
+> detail page is no evidence for that — it is an assertion. The score that
+> cleared it is the evidence, so it ships.
+>
+> Still `null` in two cases: a site the detector could not score (no comparable
+> cohort day), and a site with `excluded_from_analysis` set. Excluded telemetry
+> is not trustworthy enough to accuse a site with, and it is equally not
+> trustworthy enough to clear one with.
+>
+> `divergence`, `economics` and `hypothesis` remain `null` for healthy sites —
+> there is no divergence to date, no loss to price, and nothing to hypothesise
+> about. **Consumers that test `if (site.detection)` to mean "is flagged" must
+> switch to testing `site.status`.**
 
 ```json
 "detection": {
-  "method": "PLACEHOLDER — cohort mean deviation, to be replaced by M3 (owner A)",
-  "score": -3.42,
-  "score_type": "cohort_mean_deviation",
-  "threshold": -2.0,
-  "confidence": 0.81,
-  "cohort_size": 6,
+  "method": "Iglewicz-Hoaglin modified z-score against same-day cohort median of specific yield (kWh/kWp), flagged on 10+ breach days below z=-3.5 in a trailing 14-day window",
+  "score": -48.56,
+  "score_type": "z_score",
+  "threshold": -3.5,
+  "confidence": 0.96,
+  "breach_days": 13,
+  "window_days": 14,
+  "cohort_size": 5,
   "cohort_meets_minimum": true,
-  "data_status": "PLACEHOLDER"
+  "data_status": "BUILT"
 }
 ```
 
@@ -437,6 +459,8 @@ The main array. One object per site. Ordered by `rank` ascending, healthy sites 
 | `score_type` | enum §2.4 | ✅ | |
 | `threshold` | float | ✅ | What `score` was compared against. Without it the score is unreadable |
 | `confidence` | float 0–1 | ✅ | Frontend formats as % |
+| `breach_days` | int | ➖ | Days in the trailing window that breached `threshold`. **Added 1.7.0.** The persistence evidence stated as a count — for a flagged site this is why; for a cleared site "0 of the last 14" is the clearest form the clearance can take |
+| `window_days` | int \| null | ➖ | Length of that trailing window. **Added 1.7.0** |
 | `cohort_size` | int | ✅ | |
 | `cohort_meets_minimum` | boolean | ✅ | Mirrors the cohort flag for convenience |
 | `data_status` | enum §2.1 | ✅ | |
@@ -548,11 +572,20 @@ the chart PRD §4 calls *"the visual that sells the whole product."*
 |---|---|---|
 | `dispatch` | ✅ required | ✅ required |
 | `monitor` | ✅ required | ✅ required |
-| `healthy` | ➖ optional | ❌ omit |
+| `healthy` (scored) | ✅ emitted | ✅ emitted — **changed in 1.7.0** |
+| `healthy` (excluded / unscored) | ✅ emitted | ❌ omit |
 
-Peer data is duplicated across flagged sites. That is deliberate: at MVP scale
-(≤ 15 sites, ≤ 4 flagged) the file stays small, and the frontend needs no join
-logic. If the file passes ~5 MB, split site detail into `output/sites/{site_id}.json`
+**Why 1.7.0 emits peer data for cleared sites.** They used to omit it, which
+left the detail page for a healthy site empty. But "this site does not need a
+visit" is the product's actual output, and the chart showing it tracking its
+peers is the evidence for it — the same chart that PRD v2 §4 calls the visual
+that sells the whole product. A site excluded from analysis still omits the
+peer overlay, because it is not being compared to anything.
+
+Peer data is duplicated across sites carrying it. That is deliberate: at MVP
+scale the frontend needs no join logic. **Measured cost of the 1.7.0 change:
+572 KB → 1.1 MB raw, 77 KB gzipped**, which is what actually crosses the wire.
+If the file passes ~5 MB, split site detail into `output/sites/{site_id}.json`
 and keep the summary in `dispatch.json` — `api.js` absorbs that change alone.
 
 ### 8.8 `evidence` — optional, M5 (owner B)
@@ -748,6 +781,7 @@ stops scaffolding shipping to a judge.
 | 1.4.0 | 18 Aug 2026 | Added `assumptions.malaysia_reference_yield_kwh_per_kwp_day` and its `_range`. Additive only — no field renamed, no type changed, no existing consumer affected. Screen 4's generic assumptions renderer picks both up without a frontend change; `Assumptions` in `apps/web/src/types/dispatch.ts` declares them as optional. **Raised by C, needs D's confirmation** per the frozen-contract rule (C) |
 | 1.5.0 | 18 Aug 2026 | Added `fleet_summary.trips_avoided` / `trips_recommended` / `trip_groups`, `roi.projection`, `roi.generation_basis`, `roi.faults_confirmed_basis`, `assumptions.same_trip_radius_km` and `assumptions.projection_horizon_months`. **`estimated_saving_rm` changes basis from sites to trips** — the value moves, the type does not. New validator rules 18 and 19; rule 1 now covers the `assumptions` block. `roi.period_months` is pinned to 1 until the schema carries a reporting window. Also documents `ground_truth.json`'s top-level shape and adds `assumptions.soiling_rate_per_day` / `soiling_max_loss_fraction` for `pipeline/fault_injection.py`. Additive only; no field renamed or removed (C) |
 | 1.6.0 | 19 Aug 2026 | `ground_truth.json` events gain `severity_scale` (every event) and `base_rate_per_day` (soiling); `unit_count` now on every event with inverters, not only `string_loss`; start dates staggered. `dispatch.json` unchanged — this bumps because the label file is a documented contract owner A loads against, and 1.4.0 set the precedent of a row for a purely additive field. Additive only (C) |
+| 1.7.0 | 21 Aug 2026 | **M3 landed.** `detection` gains `breach_days` and `window_days` (§8.2, additive). `detection` is now emitted for healthy sites the detector scored and cleared (§8.2), and healthy sites carry their `series` so the peer chart renders — previously both were `null`/absent, leaving nine of eleven sites with no evidence behind them. `cohorts[].cohort_median_performance_index` is now the OBSERVED median of the cohort's daily medians, where it was the constant `assumed_yield_kwh_per_kwp_day`; `clustering_method` states the real criterion and the measured member separation. Every `PLACEHOLDER` value is gone and `meta.data_status` is `BUILT`. Widening only, but consumers testing `if (site.detection)` to mean "is flagged" must test `site.status` instead (C) |
 
 Bump minor for additive optional fields. Bump major for anything that breaks an
 existing consumer — and tell D and the frontend before you do.

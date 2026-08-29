@@ -135,6 +135,10 @@ export interface Detection {
   score_type: ScoreType
   threshold: number
   confidence: number
+  /** Schema 1.7.0. Days in the trailing window that breached `threshold`. */
+  breach_days?: number
+  /** Schema 1.7.0. Length of that trailing window. */
+  window_days?: number | null
   cohort_size: number
   cohort_meets_minimum: boolean
   data_status: DataStatus
@@ -165,7 +169,7 @@ export interface Hypothesis {
   photograph?: string[]
 }
 
-/** One row per site per day. `expected_kwh` is null until M2 (owner A) lands. */
+/** One row per site per day. `expected_kwh` is M2's modelled output, or null if the baseline parquet is absent. */
 export interface ActualVsExpectedRow {
   date: string
   actual_kwh: number

@@ -111,7 +111,8 @@ const cohort = computed(() => {
           :economics="site.economics"
         />
         <p v-else class="empty">
-          No cohort series for this site. Healthy sites omit peer data by design —
+          No peer chart for this site. Its telemetry was excluded from the cohort
+          comparison, so there is nothing to compare it against —
           docs/Schema.md section 8.7.
         </p>
       </section>
@@ -139,7 +140,35 @@ const cohort = computed(() => {
         </p>
       </section>
 
-      <p v-else class="panel">This site is within cohort tolerance. No detection recorded.</p>
+      <!--
+        A cleared site shows its working too. Schema 1.7.0 emits `detection`
+        for healthy sites the detector scored; an empty panel would hide the
+        evidence that they do not need a visit.
+      -->
+      <section v-else-if="site.detection" class="panel">
+        <h2 class="panel__heading">Why this site was cleared</h2>
+        <p class="panel__summary">
+          {{ site.name }} tracked its cohort within tolerance across the reporting
+          month. No visit is recommended.
+        </p>
+
+        <dl class="facts">
+          <div><dt>Method</dt><dd>{{ site.detection.method }}</dd></div>
+          <div><dt>Score</dt><dd>{{ site.detection.score }} ({{ site.detection.score_type }})</dd></div>
+          <div><dt>Threshold</dt><dd>{{ site.detection.threshold }} — stayed above it</dd></div>
+          <div><dt>Cohort</dt><dd>{{ cohort?.label }} · {{ site.detection.cohort_size }} sites</dd></div>
+        </dl>
+
+        <p v-if="!site.detection.cohort_meets_minimum" class="caution">
+          ⚠ This cohort is below the minimum size. Peer comparison is weaker here — treat the
+          clearance with the same caution as a flag.
+        </p>
+      </section>
+
+      <p v-else class="panel">
+        This site was not scored. Its telemetry is incomplete, so it is neither
+        flagged nor cleared — see the exclusion note above.
+      </p>
 
       <!-- Block 3 — sub-site breakdown. Only where per-inverter channels exist. -->
       <section v-if="site.sub_site" class="block">
@@ -151,8 +180,10 @@ const cohort = computed(() => {
         <InverterThermalMap :sub-site="site.sub_site" :evidence="site.evidence" />
       </section>
 
-      <!-- Block 5 — CV evidence for flagged sites. -->
-      <section v-if="site.detection" class="block">
+      <!-- Block 5 — CV evidence for flagged sites only.
+           Schema 1.7.0 emits `detection` for scored healthy sites too, so
+           gating on detection alone would mount this on every cleared roof. -->
+      <section v-if="site.status === 'dispatch' || site.status === 'monitor'" class="block">
         <VisionEvidence />
       </section>
 

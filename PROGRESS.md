@@ -4,7 +4,7 @@
 > [`CLAUDE.md`](./CLAUDE.md); this file is status and nothing else. Update it at the end of every
 > working session — append to the log, don't rewrite history.
 
-**Last updated: 19 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **12 days left**
+**Last updated: 29 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **2 days left**
 
 ---
 
@@ -12,8 +12,8 @@
 
 | | |
 |---|---|
-| **Phase** | Phase 2 — M1 shipped, M4 economics shipped, M2/M3 not started |
-| **Code written** | Pipeline + 4 dashboard screens run on real data. **23 PLACEHOLDER values remain** |
+| **Phase** | Phase 3 — M1, M2, M3, M4 on `feat/m2-m3-detector`. Not yet merged to main |
+| **Code written** | Pipeline + 4 dashboard screens on real data. **Zero PLACEHOLDER values remain** on this branch — `meta.data_status` is `BUILT` |
 | **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
 | **Schema** | 1.5.0, frozen, 19 validator rules · 45 validator tests · 26 injection tests |
 | **Public URL** | None yet |
@@ -26,7 +26,7 @@
 |---|---|---|---|
 | 1 | **Repo is 404 to the public** | A private repo during the early-Sept judging window counts as **non-submission** | Cindy (repo owner) |
 | 2 | **Deck + summary still describe PRD v1** | Different product from what we're building. See [`hinfo/HACKATHON.md`](./hinfo/HACKATHON.md) §6 Risk 1 | — |
-| 3 | **M2 and M3 unbuilt** | Every RM figure is arithmetic on a placeholder loss fraction until the detector exists. This is the 25% Technical Feasibility row | Cindy (A) |
+| 3 | ~~**M2 and M3 unbuilt**~~ | Cleared 29 Aug on `feat/m2-m3-detector` — detector + baseline, not yet merged to main | Cindy (A) / MK covering |
 
 **Cleared:** ~~PVDAQ S3 unverified~~ · ~~1 commit~~ · ~~empty README~~ (16 Aug) · ~~no code~~ (17–19 Aug:
 M1, M4, dashboard, harness all shipped).
@@ -38,7 +38,7 @@ M1, M4, dashboard, harness all shipped).
 | Milestone | Due | Status |
 |---|---|---|
 | M1: real numbers from real data across ≥5 sites | 15 Aug | ✅ **Met** (late, 17 Aug) — 11 sites, 2 cohorts |
-| M2: one API call returns the ranked dispatch list end-to-end | 20 Aug | 🔴 **Will slip** — needs M2/M3 |
+| M2: one API call returns the ranked dispatch list end-to-end | 20 Aug | 🟡 **Artifact exists** on `feat/m2-m3-detector` — still needs merge + public URL |
 | M3: someone outside the team opens the URL and gets it in 15 seconds | 24 Aug | ⬜ Not started — no public URL |
 | M4: submission complete with 5 days buffer | 26 Aug | ⬜ Not started |
 
@@ -52,15 +52,15 @@ failed; HKUST cannot exercise cross-cohort clustering anyway. See [`docs/DECISIO
 | # | Module | Status |
 |---|---|---|
 | 1 | Fleet Data Ingestion | ✅ **Built** — real PVDAQ, 11 sites, 2 cohorts (Chang Zhe covering; owned by C) |
-| 2 | Sensor-Free Baseline | ⬜ Not started — `expected_kwh` is null, `irradiance_source` NONE (A) |
-| 3 | **Fleet Peer Benchmarking** ⭐ | ⬜ Not started — flagged sites are a hardcoded list (A) |
-| 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. Inputs stay placeholder until M3 (C) |
+| 2 | Sensor-Free Baseline | ✅ **Built** (this branch) — `expected_kwh` from NASA POWER + pvlib (A; MK covering) |
+| 3 | **Fleet Peer Benchmarking** ⭐ | ✅ **Built** (this branch) — Iglewicz-Hoaglin z-score vs cohort median; placeholder list gone (A; MK covering) |
+| 4 | Economic Ranking | ✅ **Built** — trip-based saving, RP4 tariff sourced to ST. Loss figures now come from M3 on this branch (C) |
 | 5 | Drone & Visual Verification | ⬜ Not started — `evidence` block not emitted (B) |
 | 6 | Dashboard (Vue 3) | ✅ **Built** — four screens, zero console errors (D) |
 | 7 | API / Supabase | ⬜ Not started (D) |
-| 8 | Testing & Packaging | 🟡 Partial — 71 pipeline tests; no demo video (E) |
+| 8 | Testing & Packaging | 🟡 Partial — 167 pipeline tests on this branch; no demo video (E) |
 
-**71 pipeline tests.** **Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
+**167 pipeline tests** on this branch (M2/M3 suites included). **Also built (C, supporting):** Malaysian reference cases · reproducible fleet-median script ·
 fault-injection harness producing M3's ground truth.
 
 ---
@@ -68,6 +68,28 @@ fault-injection harness producing M3's ground truth.
 ## Log
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
+
+### 29 Aug 2026 — M2 and M3 extracted onto `feat/m2-m3-detector`
+
+Teammate found `expected_kwh` still null and detection still the hardcoded
+placeholder list on every GitHub branch. Both already existed locally on
+`feat/detector-and-launch`, mixed with a later dashboard restyle that was never
+pushed.
+
+This branch takes **only** the detector and baseline off that work, onto current
+`origin/main` (which now includes M5). No IsolationForest, no local LLM, no
+map/light-mode restyle.
+
+- M3: `pipeline/detect_cohort.py` — Iglewicz-Hoaglin modified z-score vs
+  same-day cohort median. `PLACEHOLDER_DISPATCH_SITE_IDS` deleted.
+- M2: `pipeline/baseline.py` — NASA POWER + pvlib; `expected_kwh` filled
+  (979/990 site-days; 11 nulls are the one day with no modelled row).
+- `dispatch.json` schema 1.7.0, `meta.data_status` BUILT, validator PASSED,
+  zero PLACEHOLDER values. 1 dispatch / 10 healthy, RM 1,566.58/month at risk.
+- Screen 2: healthy scored sites show "why this site was cleared"; CV evidence
+  stays gated on dispatch/monitor so it does not mount on every cleared roof.
+
+167 pipeline tests green (excludes `test_cv_model`, which needs ultralytics).
 
 ### 19 Aug 2026 — tariff sourced, fleet corrected, two decisions closed
 
