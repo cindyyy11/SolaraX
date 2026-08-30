@@ -14,7 +14,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { TriangleAlert, Diamond, CircleCheck, CircleSlash, Clock } from '@lucide/vue'
-import { loadDispatch, sitesByStatus, formatRinggit, formatCapacity } from '@/services/api'
+import {
+  loadDispatch,
+  sitesByStatus,
+  sitesNotAssessed,
+  isAssessed,
+  formatRinggit,
+  formatCapacity,
+} from '@/services/api'
 import type { Dispatch, Site, SiteStatus } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import FleetMap from '@/components/FleetMap.vue'
@@ -46,18 +53,70 @@ onMounted(async () => {
   }
 })
 
-const GROUPS: Array<{ status: SiteStatus; heading: string; note: string }> = [
-  { status: 'dispatch', heading: 'Dispatch recommended', note: 'above the dispatch threshold' },
-  { status: 'monitor', heading: 'Monitor', note: 'deviation detected, below dispatch threshold' },
-  { status: 'healthy', heading: 'Healthy', note: 'within cohort tolerance' },
+/**
+ * "not_assessed" is a DISPLAY group, not a schema value. The artifact only has
+ * three statuses (see isAssessed in services/api.ts for why), so an excluded
+ * site arrives labelled healthy and is separated out here.
+ */
+type GroupKey = SiteStatus | 'not_assessed'
+
+const GROUPS: Array<{ key: GroupKey; heading: string; note: string }> = [
+  { key: 'dispatch', heading: 'Dispatch recommended', note: 'above the dispatch threshold' },
+  { key: 'monitor', heading: 'Monitor', note: 'deviation detected, below dispatch threshold' },
+  { key: 'healthy', heading: 'Healthy', note: 'within cohort tolerance' },
+  { key: 'not_assessed', heading: 'Not assessed', note: 'telemetry too incomplete to rule on' },
 ]
 
 const groups = computed(() => {
   if (!dispatch.value) return []
+  const payload = dispatch.value as Dispatch
   return GROUPS.map((group) => ({
     ...group,
-    sites: sitesByStatus(dispatch.value as Dispatch, group.status),
-  }))
+    sites:
+      group.key === 'not_assessed'
+        ? sitesNotAssessed(payload)
+        : sitesByStatus(payload, group.key as SiteStatus),
+  })).filter((group) => group.key !== 'not_assessed' || group.sites.length > 0)
+})
+
+/**
+ * Screen 1's headline answer is currently "no site is worth a visit". That is a
+ * RESULT, not a gap — PRD v2 section 4: "the product's value is as much in the
+ * sites you don't visit as the ones you do" — but rendered as a bare empty list
+ * it reads as broken data.
+ *
+ * So the empty state states the conclusion and shows the closest call, which is
+ * the evidence that the threshold is doing work rather than nothing having been
+ * detected. Never close this gap by lowering the threshold.
+ */
+const dispatchVerdict = computed(() => {
+  if (!dispatch.value || !summary.value) return null
+  if (summary.value.dispatch_count > 0) return null
+
+  const threshold = dispatch.value.assumptions.dispatch_threshold_rm_per_month
+  const contenders = dispatch.value.sites
+    .filter((site) => site.economics && site.status !== 'dispatch')
+    .sort(
+      (a, b) =>
+        (b.economics?.rm_at_risk_monthly ?? 0) - (a.economics?.rm_at_risk_monthly ?? 0),
+    )
+
+  const nearest = contenders[0]
+  const nearestRm = nearest?.economics?.rm_at_risk_monthly ?? 0
+
+  return {
+    threshold,
+    assessed: dispatch.value.sites.filter(isAssessed).length,
+    nearest: nearest
+      ? {
+          name: nearest.name,
+          siteId: nearest.site_id,
+          rm: nearestRm,
+          shortfall: threshold - nearestRm,
+          percentOfThreshold: Math.round((nearestRm / threshold) * 100),
+        }
+      : null,
+  }
 })
 
 const summary = computed(() => dispatch.value?.fleet_summary ?? null)
@@ -80,10 +139,11 @@ function cohortBelowMinimum(site: Site): boolean {
  * the color does any work at all — icon and text label both ship with every
  * use, per the same rule the row markup already followed with glyphs.
  */
-const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
+const STATUS_ICON: Record<GroupKey, typeof TriangleAlert> = {
   dispatch: TriangleAlert,
   monitor: Diamond,
   healthy: CircleCheck,
+  not_assessed: CircleSlash,
 }
 </script>
 
@@ -135,12 +195,12 @@ const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
         </aside>
 
         <section class="list">
-          <section v-for="group in groups" :key="group.status" class="group">
+          <section v-for="group in groups" :key="group.key" class="group">
             <h2 class="group__heading">
               <component
-                :is="STATUS_ICON[group.status]"
+                :is="STATUS_ICON[group.key]"
                 class="group__glyph"
-                :class="`group__glyph--${group.status}`"
+                :class="`group__glyph--${group.key}`"
                 :size="14"
                 aria-hidden="true"
               />
@@ -149,7 +209,35 @@ const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
               <span class="group__note">— {{ group.note }}</span>
             </h2>
 
-            <p v-if="!group.sites.length" class="group__empty">No sites in this group.</p>
+            <!--
+              The zero here is the product's answer, not a missing row. Give it
+              the weight of a result and show the closest call as evidence the
+              threshold is what held it back.
+            -->
+            <div
+              v-if="group.key === 'dispatch' && !group.sites.length && dispatchVerdict"
+              class="verdict"
+            >
+              <p class="verdict__headline">
+                No site clears {{ formatRinggit(dispatchVerdict.threshold) }}/month this month.
+              </p>
+              <p class="verdict__body">
+                All {{ dispatchVerdict.assessed }} assessed sites cost more to visit than they are
+                losing. That is the recommendation: send nobody, and keep
+                {{ formatRinggit(summary.estimated_saving_rm) }} of mobilisation budget across
+                {{ summary.trips_avoided }} trips that did not need to happen.
+              </p>
+              <p v-if="dispatchVerdict.nearest" class="verdict__nearest">
+                <span class="verdict__nearest-label">Closest call</span>
+                {{ dispatchVerdict.nearest.name }} —
+                {{ formatRinggit(dispatchVerdict.nearest.rm) }}/mo at risk,
+                <strong>{{ formatRinggit(dispatchVerdict.nearest.shortfall) }} short</strong>
+                of the threshold ({{ dispatchVerdict.nearest.percentOfThreshold }}% of it). It is
+                detected and ranked — it is not yet worth the trip.
+              </p>
+            </div>
+
+            <p v-else-if="!group.sites.length" class="group__empty">No sites in this group.</p>
 
             <ol v-else class="rows">
               <li
@@ -406,6 +494,9 @@ const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
 .group__glyph--healthy {
   color: var(--status-good);
 }
+.group__glyph--not_assessed {
+  color: var(--text-muted);
+}
 
 .group__count {
   color: var(--text-secondary);
@@ -423,6 +514,51 @@ const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/*
+   The "send nobody" verdict. Styled as a conclusion, not as an error: the good
+   status colour, because a clean month IS the product working. An empty-list
+   grey here would read as a fetch that failed.
+*/
+.verdict {
+  border: 1px solid var(--border-hairline);
+  border-left: 3px solid var(--status-good);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+}
+
+.verdict__headline {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.verdict__body {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.verdict__nearest {
+  margin: 0.75rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-hairline);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.verdict__nearest-label {
+  display: inline-block;
+  margin-right: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* --- Rows --- */

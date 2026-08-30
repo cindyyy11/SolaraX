@@ -16,7 +16,7 @@
  *    knowing before a judge finds out.
  */
 import { computed, onMounted, ref } from 'vue'
-import { loadDispatch, formatRinggit } from '@/services/api'
+import { loadDispatch, formatRinggit, isAssessed } from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
@@ -75,15 +75,30 @@ const headline = computed(() => {
   }
 })
 
-/** The fleet split — the product's central claim, drawn rather than stated. */
+/**
+ * The fleet split — the product's central claim, drawn rather than stated.
+ *
+ * Counted from the sites array rather than read from fleet_summary, because
+ * summary.healthy_count includes sites the detector never ruled on. The frozen
+ * schema cannot express a fourth status (validator rule 4 asserts the three
+ * counts sum to site_count), so the separation is made here — the same split
+ * Screen 1 draws, so the two screens agree. See isAssessed in services/api.ts.
+ */
 const statusSplit = computed(() => {
-  if (!summary.value) return []
+  if (!summary.value || !dispatch.value) return []
   const total = summary.value.site_count || 1
+  const sites = dispatch.value.sites
+  const assessedWith = (status: string) =>
+    sites.filter((site) => site.status === status && isAssessed(site)).length
+
   return [
-    { key: 'dispatch', label: 'Dispatch', count: summary.value.dispatch_count },
-    { key: 'monitor', label: 'Monitor', count: summary.value.monitor_count },
-    { key: 'healthy', label: 'Healthy', count: summary.value.healthy_count },
-  ].map((part) => ({ ...part, percent: (part.count / total) * 100 }))
+    { key: 'dispatch', label: 'Dispatch', count: assessedWith('dispatch') },
+    { key: 'monitor', label: 'Monitor', count: assessedWith('monitor') },
+    { key: 'healthy', label: 'Healthy', count: assessedWith('healthy') },
+    { key: 'not_assessed', label: 'Not assessed', count: sites.filter((s) => !isAssessed(s)).length },
+  ]
+    .filter((part) => part.key !== 'not_assessed' || part.count > 0)
+    .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
 })
 
 /** Money at risk by site, ranked. Shows how concentrated the exposure is. */
@@ -615,6 +630,9 @@ const assumptionRows = computed(() => {
 .split__part--healthy {
   background: var(--status-good);
 }
+.split__part--not_assessed {
+  background: var(--text-muted);
+}
 
 .split__label {
   font-size: 0.85rem;
@@ -653,6 +671,9 @@ const assumptionRows = computed(() => {
 }
 .split__swatch--healthy {
   background: var(--status-good);
+}
+.split__swatch--not_assessed {
+  background: var(--text-muted);
 }
 
 /* Ranked bars */
