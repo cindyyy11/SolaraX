@@ -335,7 +335,12 @@ const assumptionRows = computed(() => {
         <h2 class="chart__title">Money at risk by site</h2>
         <ul class="bars">
           <li v-for="item in riskBySite" :key="item.siteId" class="bars__row">
-            <span class="bars__label">{{ item.name }}</span>
+            <RouterLink
+              :to="{ name: 'site-detail', params: { siteId: item.siteId } }"
+              class="bars__label"
+            >
+              {{ item.name }}
+            </RouterLink>
             <span class="bars__track">
               <span
                 class="bars__fill"
@@ -825,6 +830,19 @@ const assumptionRows = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.bars__label:hover,
+.bars__label:focus-visible {
+  color: var(--action-text);
+  text-decoration: underline;
+}
+
+.bars__label:focus-visible {
+  outline: 2px solid var(--action-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .bars__track {
