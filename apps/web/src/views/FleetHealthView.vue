@@ -184,7 +184,15 @@ const assumptionRows = computed(() => {
 
 <template>
   <main class="screen">
-    <p v-if="isLoading">Loading…</p>
+    <div v-if="isLoading" class="skeleton" aria-busy="true" aria-live="polite">
+      <span class="sr-only">Loading fleet health…</span>
+      <div class="skeleton__block skeleton__block--header"></div>
+      <div class="skeleton__block skeleton__block--case"></div>
+      <div class="skeleton__row">
+        <div v-for="n in 4" :key="n" class="skeleton__block skeleton__block--tile"></div>
+      </div>
+      <div class="skeleton__block skeleton__block--chart"></div>
+    </div>
 
     <template v-else-if="dispatch && summary && roi && headline">
       <header class="head">
@@ -1089,5 +1097,77 @@ code {
 
 .provenance p {
   margin: 0 0 0.2rem;
+}
+
+/* --- Loading skeleton --- */
+
+.skeleton {
+  padding-top: 1.5rem;
+}
+
+.skeleton__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  margin-top: 1.5rem;
+}
+
+.skeleton__block {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    100deg,
+    var(--page-plane) 40%,
+    var(--border-hairline) 50%,
+    var(--page-plane) 60%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton__block--header {
+  height: 3.5rem;
+  max-width: 26rem;
+}
+
+.skeleton__block--case {
+  height: 3.25rem;
+  margin-top: 1.25rem;
+}
+
+.skeleton__block--tile {
+  height: 4.5rem;
+}
+
+.skeleton__block--chart {
+  height: 10rem;
+  margin-top: 1.75rem;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__block {
+    animation: none;
+    background: var(--page-plane);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
