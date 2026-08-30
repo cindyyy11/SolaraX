@@ -10,11 +10,13 @@ Turn Spatial Operations into a credible guided inspection cockpit: scenario-spec
 
 ## Spatial simulation
 
-The primary scene is a lazy-loaded Three.js renderer. The existing lightweight CSS scene remains the loading, reduced-performance, and WebGL-failure fallback. Both paths expose the same scenario summary and evidence labels.
+The polished lightweight scene is the default Operational view. A synchronized Interactive 3D view uses the lazy-loaded Three.js renderer for orbit and exploration. Both views expose the same scenario, route, waypoint, severity, summary, and evidence state. Switching views preserves the current inspection context. Operational view remains available when WebGL is loading, unsupported, or lost.
+
+The simulation toolbar contains a clear `Operational | Interactive 3D` switch. Overview, Array, Anomaly, and Drone Route camera controls operate within the selected renderer and may never target a hidden scene. Operational view leads daily use; Interactive 3D is an optional exploration layer.
 
 The scene supports illustrative warehouse roof, commercial complex, and ground-mounted array configurations. Site selection may choose a configuration for demonstration variety, but the interface must state that building, equipment, route, and defect geometry are simulated.
 
-Scenario severity changes the visible affected area and intensity as well as the bounded calculation. Scenario selection changes camera framing, environment, equipment state, and drone behavior:
+Scenario severity changes the visible affected area and intensity as well as the bounded calculation. The active scenario receives a prominent scene label and a concise explanation of what changed. Scenario selection changes camera framing, environment, equipment state, route geometry, and drone behavior:
 
 - Soiling: full-array serpentine survey with distributed dust coverage.
 - Partial shading: perimeter and obstruction pass with a visible shadow path.
@@ -25,7 +27,7 @@ Scenario severity changes the visible affected area and intensity as well as the
 - Heatwave: high-altitude thermal overview with heat-stress treatment.
 - Curtailment: inverter-to-grid connection trace with capped energy flow.
 
-Each guided route contains typed waypoints. Selecting a waypoint pauses the drone, frames the relevant region, and explains what the operator should verify. The route timeline provides previous, next, play, pause, and reset controls.
+Each guided route contains typed waypoints. Selecting a waypoint pauses the drone, frames the relevant region, and explains what the operator should verify. The route timeline provides previous, next, play, pause, and reset controls. Route geometry must be visibly different between scenarios rather than reusing a generic loop.
 
 Explore mode adds orbit controls and optional manual drone positioning. It is secondary to Guided Inspection mode, visibly labelled illustrative, and cannot change scenario calculations or evidence state.
 
@@ -70,7 +72,9 @@ The WebGL scene, CSS fallback, route controls, CV intake, CV review, and operato
 2. Severity visibly changes affected area or intensity without changing measured site data.
 3. Guided routes expose selectable waypoints with operational explanations.
 4. Explore mode is optional, interruptible, and cannot change evidence or calculations.
-5. WebGL loading or failure preserves a usable lightweight simulation and readable outputs.
+5. WebGL loading or failure preserves the default Operational simulation and readable outputs.
+5a. Overview, Array, Anomaly, and Drone Route controls update the renderer currently visible to the user.
+5b. Operational and Interactive 3D views preserve the same scenario and waypoint when switching.
 6. CV review keeps the original image visible and makes its operational question clear.
 7. Findings, confidence, image regions, and spatial focus remain synchronized where source coordinates permit it.
 8. Operator evidence decisions remain explicit and do not silently modify dispatch state.
