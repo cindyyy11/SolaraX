@@ -15,10 +15,11 @@
 
 ## Phase 3 — Guided inspection controls
 
-1. Add guided/explore mode switching, play, pause, previous, next, reset, and selectable waypoints.
+1. Add Operational/Interactive 3D view switching, Baseline/Scenario comparison, play, pause, previous, next, reset, and selectable waypoints.
 2. Animate the drone along scenario-specific segments and synchronize camera focus and operator instruction.
-3. Connect severity to affected area and treatment intensity.
-4. Add reduced-motion, keyboard, touch, and readable non-3D equivalents.
+3. Connect severity to affected area and treatment intensity in both renderers.
+4. Keep direct orbit, zoom, waypoint, and camera navigation available in Interactive 3D without a separate Explore mode.
+5. Add reduced-motion, keyboard, touch, and readable non-3D equivalents.
 
 ## Phase 4 — CV verification workspace
 
