@@ -235,8 +235,6 @@ function buildLighting(): LightingEffect {
 function render(): void {
   if (!deck) return
   const sites = withFannedCoordinates(props.sites)
-  // TEMP DEBUG
-  console.log('[skyline debug]', JSON.stringify(sites.map(s => ({ id: s.site_id, lon: s.plotLon, lat: s.plotLat, elev: columnHeight(s), status: s.status }))))
   deck.setProps({ layers: buildLayers(sites), effects: [buildLighting()] })
   if (container.value) container.value.style.backgroundColor = backgroundColor()
 }
@@ -284,8 +282,11 @@ function measuredSize(): { width: number; height: number } | null {
  *  silently reset whatever the viewer had already dragged the scene to. */
 let lastViewState: typeof INITIAL_VIEW_STATE = { ...INITIAL_VIEW_STATE }
 
+let lastSize: { width: number; height: number } | null = null
+
 function createDeck(size: { width: number; height: number }): void {
   if (!container.value) return
+  lastSize = size
 
   deck = new Deck({
     parent: container.value,
@@ -324,6 +325,19 @@ function recreateAtCurrentSize(): void {
   resizeTimer = setTimeout(() => {
     const size = measuredSize()
     if (!size) return
+    // ResizeObserver invokes its callback once immediately on `observe()`,
+    // per spec, even though nothing has actually changed — that fired a
+    // finalize+recreate ~150ms after every single mount for no reason,
+    // tearing down the WebGL context this component had just built and
+    // rendered a frame into. Harmless once. But every toggle onto this tab
+    // paid for a full context churn, and enough of that (switching Map ->
+    // 3D -> Map -> 3D a few times, which is exactly what a viewer exploring
+    // the toggle does) can exhaust the browser's WebGL context budget,
+    // after which the canvas goes black with no error and no console
+    // message — reproduced by reading the canvas back with readPixels after
+    // a few toggles. Skipping a no-op "resize" removes the unnecessary
+    // churn at the source rather than only the symptom.
+    if (lastSize && size.width === lastSize.width && size.height === lastSize.height) return
     deck?.finalize()
     createDeck(size)
   }, 150)

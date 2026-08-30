@@ -19,7 +19,7 @@
  * dataset does not contain. Same principle as the rule against rendering a
  * panel grid.
  */
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch, h } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
@@ -28,6 +28,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { defineAsyncComponent } from 'vue'
 import { TriangleAlert, Diamond, CircleCheck, Box } from '@lucide/vue'
 import type { Site, SiteStatus } from '@/types/dispatch'
+import { basemapForView, type MapViewMode } from './fleetBasemap'
 
 /**
  * Lazy on purpose. deck.gl alone is roughly 1 MB before gzip — bundling it
@@ -40,8 +41,12 @@ const FleetSkyline3D = defineAsyncComponent({
   delay: 0,
   // A cold chunk fetch is the one moment this tab is legitimately blank; name
   // it so that reads as "loading" rather than "broken".
+  // A render function, not a `template` string: Vite aliases `vue` to the
+  // runtime-only build, which cannot compile a template string at runtime —
+  // that silently drops this component, so the "loading" state was actually
+  // blank the whole time.
   loadingComponent: {
-    template: '<p class="map-3d-loading">Loading 3D view…</p>',
+    render: () => h('p', { class: 'map-3d-loading' }, 'Loading 3D view…'),
   },
 })
 
@@ -62,93 +67,77 @@ const container = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let clusterGroup: L.MarkerClusterGroup | null = null
 let baseLayer: L.TileLayer | null = null
+let fallbackLayer: L.GridLayer | null = null
 const markersBySiteId = new Map<string, L.Marker>()
+const basemapUnavailable = ref(false)
+
+class BasemapFallbackLayer extends L.GridLayer {
+  protected createTile(_coords: L.Coords, done: L.DoneCallback): HTMLElement {
+    const tile = L.DomUtil.create('div', 'basemap-fallback-tile')
+    done(undefined, tile)
+    return tile
+  }
+}
 
 /**
- * Esri's gray canvas, light and dark, on purpose and after checking alternatives.
+ * Provider choice is deliberately view-specific.
  *
  * CARTO's free raster tiles now burn "API KEY REQUIRED" across every tile —
  * they return 200, so nothing errors and nothing logs, the watermark just sits
- * over the fleet map. OpenStreetMap's own servers return a 418 "access blocked"
- * tile to anything their usage policy does not recognise, which is not a
- * dependency to carry into a public judging window.
- *
- * Both endpoints below need no key, and being desaturated they let the status
- * markers carry the only color on the map, which is the point of the screen.
+ * over the fleet map. Esri's Gray Canvas later replaced OSM, but it serves
+ * "Map data not yet available" tiles in this fleet view. Map therefore uses
+ * keyless OSM Standard; Esri remains only where it is needed for Aerial.
  */
-const ESRI_ROOT = 'https://server.arcgisonline.com/ArcGIS/rest/services'
-const BASEMAP = {
-  light: `${ESRI_ROOT}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-  dark: `${ESRI_ROOT}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-  /**
-   * AERIAL IS THE ONE HONEST WAY TO "SHOW THE PRODUCT".
-   *
-   * PVDAQ publishes no panel positions, no array geometry and no site plans —
-   * which is why `CLAUDE.md` forbids rendering a panel grid, and why a 3D model
-   * of a site would be invented geometry in a product whose whole claim is that
-   * it needs no site-grade instrumentation.
-   *
-   * Satellite imagery is the opposite: it is a real photograph of the real
-   * roof at coordinates the dataset actually contains. Zoom into the Agassi
-   * Academy and the arrays are there, in the world, unretouched. Nothing is
-   * modelled and nothing is claimed.
-   */
-  aerial: `${ESRI_ROOT}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
-} as const
-
-type MapViewMode = 'map' | 'aerial' | '3d'
 const view = ref<MapViewMode>('map')
 
 /**
- * Resolve the theme the same way theme.css does, and in the same order: an
- * explicit `data-theme` stamp wins, and only when there is none does the OS
- * preference decide. Reading just one of the two gets it wrong in the state
- * most viewers are actually in — unstamped, following their system.
+ * AERIAL IS THE ONE HONEST WAY TO "SHOW THE PRODUCT".
+ *
+ * PVDAQ publishes no panel positions, array geometry, or site plans. Satellite
+ * imagery is a real photograph at real dataset coordinates, not invented
+ * geometry. The Map view remains the neutral geographic context.
  */
-function prefersDark(): boolean {
-  const stamped = document.documentElement.dataset.theme
-  if (stamped === 'dark') return true
-  if (stamped === 'light') return false
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+function removeBasemapLayers(): void {
+  if (!map) return
+  if (baseLayer) map.removeLayer(baseLayer)
+  if (fallbackLayer) map.removeLayer(fallbackLayer)
+  baseLayer = null
+  fallbackLayer = null
 }
 
-/** Aerial imagery is photographic and ignores the theme; the canvas follows it. */
-function basemapUrl(): string {
-  if (view.value === 'aerial') return BASEMAP.aerial
-  return prefersDark() ? BASEMAP.dark : BASEMAP.light
+function showLocalBasemapFallback(): void {
+  if (!map || basemapUnavailable.value || view.value !== 'map') return
+
+  basemapUnavailable.value = true
+  if (baseLayer) map.removeLayer(baseLayer)
+  baseLayer = null
+
+  fallbackLayer = new BasemapFallbackLayer({ tileSize: 256 })
+  fallbackLayer.addTo(map)
 }
 
-/**
- * Covers all three view keys so it indexes on `MapViewMode` without a type
- * guard at every call site. The '3d' entry is never actually shown here — the
- * Leaflet tile layer is hidden (not attributed) while that view is active, and
- * FleetSkyline3D's own Esri Imagery / world-atlas attribution takes over. It
- * exists so ATTRIBUTION is a total function of the view, which is one honest
- * fact instead of three places independently trusting the initial 'map'.
- */
-const ATTRIBUTION = {
-  map: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
-  aerial:
-    'Imagery &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-  '3d': '',
-} as const
+/** Replace the complete layer so stale provider tiles and attribution cannot
+ * survive a view change. */
+function installBasemap(): void {
+  if (!map) return
+  removeBasemapLayers()
+  basemapUnavailable.value = false
 
-/** '3d' has no Leaflet tile layer — the skyline is a separate WebGL canvas
- *  handed its own attribution inside FleetSkyline3D. */
-function applyBasemap(): void {
-  if (!baseLayer || view.value === '3d') return
-  baseLayer.setUrl(basemapUrl())
-  // Attribution is a licence condition, not decoration — it has to change with
-  // the layer it credits.
-  baseLayer.options.attribution = ATTRIBUTION[view.value]
-  map?.attributionControl.remove()
-  map?.attributionControl.addTo(map)
+  const config = basemapForView(view.value)
+  if (!config) return
+
+  baseLayer = L.tileLayer(config.url, {
+    attribution: config.attribution,
+    maxZoom: config.maxZoom,
+  })
+  if (view.value === 'map') baseLayer.on('tileerror', showLocalBasemapFallback)
+  baseLayer.addTo(map)
 }
 
 function setView(next: MapViewMode): void {
   if (view.value === next) return
   view.value = next
-  applyBasemap()
+  installBasemap()
   emit('view-change', next)
   // Leaflet's tile canvas is sized once on mount; toggling away to the 3D
   // panel and back changes this container's box without Leaflet knowing, so
@@ -245,9 +234,6 @@ function renderMarkers(): void {
   }
 }
 
-let themeObserver: MutationObserver | null = null
-let darkQuery: MediaQueryList | null = null
-
 onMounted(() => {
   if (!container.value) return
 
@@ -256,10 +242,7 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  baseLayer = L.tileLayer(basemapUrl(), {
-    attribution: ATTRIBUTION[view.value],
-    maxZoom: 19,
-  }).addTo(map)
+  installBasemap()
 
   clusterGroup = L.markerClusterGroup({
     showCoverageOnHover: false,
@@ -272,23 +255,10 @@ onMounted(() => {
 
   renderMarkers()
 
-  // Two sources, because the theme has three states. The attribute fires when
-  // something stamps an explicit choice; the media query fires for everyone
-  // else, which today is every viewer — nothing in the app sets data-theme yet.
-  themeObserver = new MutationObserver(applyBasemap)
-  themeObserver.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  })
-  darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  darkQuery.addEventListener('change', applyBasemap)
 })
 
 onBeforeUnmount(() => {
-  themeObserver?.disconnect()
-  themeObserver = null
-  darkQuery?.removeEventListener('change', applyBasemap)
-  darkQuery = null
+  removeBasemapLayers()
   map?.remove()
   map = null
   clusterGroup = null
@@ -319,6 +289,9 @@ watch(
   <div class="map-frame">
     <div class="map-shell" :data-view="view">
       <div v-show="view !== '3d'" ref="container" class="map-canvas"></div>
+      <p v-if="basemapUnavailable && view === 'map'" class="basemap-notice" role="status">
+        Basemap temporarily unavailable — site locations remain interactive.
+      </p>
       <FleetSkyline3D
         v-if="view === '3d'"
         :sites="sites"
@@ -411,6 +384,23 @@ watch(
 .map-canvas {
   height: 320px;
   width: 100%;
+}
+
+.basemap-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  z-index: 900;
+  max-width: calc(100% - 1.5rem);
+  margin: 0;
+  padding: 0.4rem 0.65rem;
+  transform: translateX(-50%);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 @media (max-width: 900px) {
@@ -535,6 +525,15 @@ watch(
   so these must be global.
 -->
 <style>
+.basemap-fallback-tile {
+  box-sizing: border-box;
+  background-color: var(--surface-2, #eef1f3);
+  background-image:
+    linear-gradient(var(--border-hairline, #d7dce0) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-hairline, #d7dce0) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
 .fleet-marker {
   display: grid;
   place-items: center;
