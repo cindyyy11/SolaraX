@@ -111,6 +111,14 @@ const statusSplit = computed(() => {
     .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
 })
 
+/** Screen-reader text for the role="img" split — the legend beside it is visual-only. */
+const splitAriaLabel = computed(
+  () =>
+    `Fleet split by triage status: ${statusSplit.value
+      .map((part) => `${part.label} — ${part.count} sites`)
+      .join(', ')}`,
+)
+
 /** Trip groups ranked by how many sites they cover — see sortedTripGroups. */
 const tripGroups = computed(() => sortedTripGroups(dispatch.value?.fleet_summary.trip_groups ?? []))
 
@@ -274,7 +282,7 @@ const assumptionRows = computed(() => {
       <!-- The core claim, drawn: most of the fleet is not visited. -->
       <section class="chart">
         <h2 class="chart__title">Where the fleet sits this month</h2>
-        <div class="split" role="img" aria-label="Fleet split by triage status">
+        <div class="split" role="img" :aria-label="splitAriaLabel">
           <span
             v-for="part in statusSplit"
             :key="part.key"
