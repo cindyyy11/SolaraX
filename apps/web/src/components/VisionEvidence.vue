@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   predictVision,
   type VisionPrediction,
@@ -20,6 +20,41 @@ const prediction = ref<VisionPrediction | null>(null)
 
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+const isDragging = ref(false)
+const validationMessage = ref<string | null>(null)
+const reviewState = ref<'unreviewed' | 'confirmed' | 'needs-review'>('unreviewed')
+
+const confidencePercent = computed(() =>
+  prediction.value ? Math.round(prediction.value.evidence.confidence * 100) : 0,
+)
+const confidenceLabel = computed(() => {
+  if (confidencePercent.value >= 80) return 'Strong model signal'
+  if (confidencePercent.value >= 55) return 'Review recommended'
+  return 'Low confidence'
+})
+
+function clearPreview() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = null
+}
+
+function validateFile(file: File): string | null {
+  if (!file.type.startsWith('image/')) return 'Choose an image file (JPG, PNG, WebP, or a supported thermal export).'
+  if (file.size > 12 * 1024 * 1024) return 'This image is larger than 12 MB. Export a smaller frame and try again.'
+  return null
+}
+
+function setFile(file: File) {
+  const invalid = validateFile(file)
+  validationMessage.value = invalid
+  if (invalid) return
+  selectedFile.value = file
+  prediction.value = null
+  error.value = null
+  reviewState.value = 'unreviewed'
+  clearPreview()
+  previewUrl.value = URL.createObjectURL(file)
+}
 
 function chooseImage(event: Event) {
   const input = event.target as HTMLInputElement
@@ -30,15 +65,13 @@ function chooseImage(event: Event) {
     return
   }
 
-  selectedFile.value = file
-  prediction.value = null
-  error.value = null
+  setFile(file)
+}
 
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value)
-  }
-
-  previewUrl.value = URL.createObjectURL(file)
+function dropImage(event: DragEvent) {
+  isDragging.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (file) setFile(file)
 }
 
 async function analyseImage() {
@@ -62,6 +95,17 @@ async function analyseImage() {
     isLoading.value = false
   }
 }
+
+function resetEvidence() {
+  selectedFile.value = null
+  prediction.value = null
+  error.value = null
+  validationMessage.value = null
+  reviewState.value = 'unreviewed'
+  clearPreview()
+}
+
+onBeforeUnmount(clearPreview)
 </script>
 
 <template>
@@ -83,35 +127,40 @@ async function analyseImage() {
     </p>
 
 
-    <input
-      type="file"
-      accept="image/*"
-      @change="chooseImage"
-    />
-
-    <img
-      v-if="previewUrl"
-      :src="previewUrl"
-      class="vision__preview"
-      alt="Uploaded thermal image"
-    />
-
-    <button
-      class="vision__button"
-      :disabled="!selectedFile || isLoading"
-      @click="analyseImage"
+    <div
+      class="vision__dropzone"
+      :class="{ 'vision__dropzone--active': isDragging, 'vision__dropzone--selected': selectedFile }"
+      @dragover.prevent="isDragging = true"
+      @dragleave.prevent="isDragging = false"
+      @drop.prevent="dropImage"
     >
-      {{ isLoading ? 'Analysing…' : 'Analyse image' }}
-    </button>
+      <input id="vision-file" type="file" accept="image/*" capture="environment" @change="chooseImage" />
+      <label for="vision-file" class="vision__choose">Choose or capture image</label>
+      <span>or drag a thermal frame here · max 12 MB</span>
+    </div>
+    <p v-if="validationMessage" class="vision__validation" role="alert">{{ validationMessage }}</p>
+
+    <div v-if="previewUrl" class="vision__review">
+      <div class="vision__image-frame">
+        <img :src="previewUrl" class="vision__preview" alt="Selected thermal image for review" />
+        <span class="vision__image-badge">Original frame</span>
+      </div>
+      <div class="vision__review-actions">
+        <button class="vision__button" :disabled="isLoading" @click="analyseImage">
+          {{ isLoading ? 'Analysing…' : 'Analyse image' }}
+        </button>
+        <button class="vision__replace" type="button" :disabled="isLoading" @click="resetEvidence">Replace image</button>
+      </div>
+    </div>
+    <ol v-if="isLoading" class="vision__progress" aria-label="Analysis progress">
+      <li class="active">Checking image quality</li><li class="active">Running model</li><li>Preparing evidence</li>
+    </ol>
 
     <p v-if="error" class="vision__error">
       {{ error }}
     </p>
 
-   <div
-  v-if="prediction"
-  class="vision__result"
->
+   <div v-if="prediction" class="vision__result">
   <template v-if="prediction.evidence.defect_class === 'Unknown'">
     <p>
       <strong>Unable to classify image.</strong>
@@ -122,8 +171,7 @@ async function analyseImage() {
     </p>
 
     <p>
-      <strong>Model confidence:</strong>
-      {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
+      <strong>Model confidence:</strong> {{ confidencePercent }}%
     </p>
   </template>
 
@@ -134,8 +182,7 @@ async function analyseImage() {
     </p>
 
     <p>
-      <strong>Confidence:</strong>
-      {{ (prediction.evidence.confidence * 100).toFixed(2) }}%
+      <strong>Confidence:</strong> {{ confidencePercent }}% · {{ confidenceLabel }}
     </p>
 
     <p>
@@ -153,6 +200,15 @@ async function analyseImage() {
       {{ prediction.evidence.data_status }}
     </p>
   </template>
+  <div class="vision__confidence" aria-label="Model confidence">
+    <span :style="{ transform: `scaleX(${confidencePercent / 100})` }"></span>
+  </div>
+  <p class="vision__localization">No spatial coordinates returned by the model. This result is shown as corroborating evidence only; no panel location is inferred.</p>
+  <div class="vision__decision" aria-label="Evidence review decision">
+    <span>Operator review</span>
+    <button type="button" :class="{ active: reviewState === 'confirmed' }" @click="reviewState = 'confirmed'">Supports dispatch</button>
+    <button type="button" :class="{ active: reviewState === 'needs-review' }" @click="reviewState = 'needs-review'">Needs field verification</button>
+  </div>
 </div>
   </section>
 </template>
@@ -182,13 +238,25 @@ async function analyseImage() {
 }
 
 .vision input[type='file'] {
-  display: block;
-  width: 100%;
-  max-width: 22rem;
-  font: inherit;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
+
+.vision__dropzone { position: relative; display: flex; min-height: 7rem; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; padding: 1rem; text-align: center; border: 1px dashed var(--baseline); border-radius: var(--radius-md); background: var(--surface-2); transition: border-color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
+.vision__dropzone--active { border-color: var(--action-text); background: var(--surface-selected); }
+.vision__dropzone span { color: var(--text-muted); font-size: .72rem; }
+.vision__choose { min-height: 44px; display: inline-flex; align-items: center; padding: .6rem .85rem; color: var(--action-ink); background: var(--action-fill); border-radius: var(--radius-sm); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.vision__validation { margin: .6rem 0 0; color: var(--status-critical); font-size: .78rem; }
+.vision__review { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: end; margin-top: 1rem; }
+.vision__image-frame { position: relative; min-width: 0; }
+.vision__preview { display: block; width: 100%; max-width: 420px; max-height: 320px; object-fit: contain; border-radius: var(--radius-sm); background: var(--surface-2); }
+.vision__image-badge { position: absolute; left: .5rem; bottom: .5rem; padding: .25rem .4rem; color: #fff; background: rgba(11,11,11,.75); border-radius: 3px; font-size: .62rem; }
+.vision__review-actions { display: flex; flex-direction: column; gap: .45rem; }
+.vision__replace { padding: .3rem; color: var(--text-secondary); background: transparent; border: 0; font: inherit; font-size: .72rem; cursor: pointer; }
+.vision__progress { display: flex; gap: 1rem; margin: .8rem 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: .7rem; }
+.vision__progress li.active { color: var(--action-text); font-weight: 700; }
 
 .vision input[type='file']::file-selector-button {
   margin-right: 0.6rem;
@@ -263,8 +331,22 @@ async function analyseImage() {
 .vision__result p {
   margin: 0.25rem 0;
 }
+.vision__confidence { height: 6px; margin: .8rem 0; overflow: hidden; background: var(--surface-2); border-radius: var(--radius-full); }
+.vision__confidence span { display: block; width: 100%; height: 100%; transform-origin: left center; background: var(--action-fill); transition: transform var(--duration-base) var(--ease-out); }
+.vision__localization { color: var(--text-muted); font-size: .74rem; line-height: 1.45; }
+.vision__decision { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .8rem; padding-top: .7rem; border-top: 1px solid var(--border-hairline); }
+.vision__decision span { width: 100%; color: var(--text-muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
+.vision__decision button { min-height: 40px; padding: .45rem .6rem; color: var(--text-secondary); background: transparent; border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); font: inherit; font-size: .7rem; cursor: pointer; }
+.vision__decision button.active { color: var(--action-ink); background: var(--action-fill); border-color: var(--action-fill); }
 
 .vision__error {
   color: var(--status-critical);
+}
+
+@media (max-width: 620px) {
+  .vision__review { grid-template-columns: 1fr; }
+  .vision__preview { max-width: none; }
+  .vision__review-actions { flex-direction: row; align-items: center; }
+  .vision__button { flex: 1; justify-content: center; }
 }
 </style>
