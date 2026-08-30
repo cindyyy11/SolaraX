@@ -12,7 +12,7 @@
  */
 
 import { toHttpError, HttpError } from './httpError'
-import type { Dispatch, Site, Cohort, CohortSeriesRow, SiteStatus } from '@/types/dispatch'
+import type { Dispatch, Site, Cohort, CohortSeriesRow, SiteStatus, TripGroup } from '@/types/dispatch'
 
 /** Major version this frontend was written against. A mismatch is a loud warning. */
 const EXPECTED_SCHEMA_MAJOR = '1'
@@ -154,6 +154,16 @@ export function cohortLines(rows: CohortSeriesRow[]): CohortLine[] {
 
   // Subject last so it draws on top of its peers.
   return [...bySite.values()].sort((a, b) => Number(a.isSubject) - Number(b.isSubject))
+}
+
+/**
+ * Trip groups ranked by how many sites they cover. Multi-site groups are the
+ * concrete evidence behind "trips avoided" — a technician reaching five roofs
+ * in one visit is a more persuasive fact than a headline number, so it sorts
+ * first.
+ */
+export function sortedTripGroups(groups: TripGroup[]): TripGroup[] {
+  return [...groups].sort((a, b) => b.site_count - a.site_count)
 }
 
 // --- Formatting -------------------------------------------------------------
