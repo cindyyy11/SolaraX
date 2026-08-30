@@ -219,8 +219,11 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  baseLayer = L.tileLayer(basemapUrl(), {
-    attribution: ATTRIBUTION[view.value],
+  // OpenStreetMap standard tiles: keyless and requires no account. CARTO's
+  // basemaps now watermark unauthenticated tiles with "API KEY REQUIRED",
+  // and a judged public URL must not depend on a key we'd have to ship.
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
   }).addTo(map)
 

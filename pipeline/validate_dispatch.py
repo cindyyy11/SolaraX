@@ -26,6 +26,20 @@ VALID_DATA_STATUS = {"BUILT", "SIMULATED", "PLACEHOLDER"}
 VALID_SITE_STATUS = {"dispatch", "monitor", "healthy"}
 VALID_SCORE_TYPES = {"z_score", "isolation_forest", "cohort_mean_deviation", "other"}
 
+# docs/Schema.md section 8.8. `batch` was baked in by a pipeline run; `live`
+# was written back by the upload path after generation. There is no third
+# value — anything else means the producer invented one.
+VALID_INFERENCE_MODES = {"batch", "live"}
+
+# Required whenever `evidence` is present with has_imagery true. Schema 8.8.
+EVIDENCE_REQUIRED_FIELDS = [
+    "defect_class",
+    "confidence",
+    "model_note",
+    "inference_mode",
+    "data_status",
+]
+
 FLAGGED_STATUSES = {"dispatch", "monitor"}
 DETECTION_BLOCKS = ["detection", "divergence", "economics", "hypothesis"]
 
@@ -429,6 +443,56 @@ def check_score_types(payload, report):
                 site.get("site_id"), score_type, sorted(VALID_SCORE_TYPES)))
 
 
+def check_evidence_block(payload, report):
+    """Rule 20 — the M5 evidence block conforms to Schema section 8.8.
+
+    Evidence is optional: a site with no imagery omits the key entirely, or
+    sets has_imagery false. Both are correct and neither is checked further.
+
+    What is checked is the case that actually ships to a judge — a block that
+    claims imagery. `inference_mode` is the field worth being strict about,
+    because it is the one that tells a reader whether the value was produced
+    by the pipeline run that wrote the file, or written back afterwards by the
+    upload path. An invented value there makes the provenance unreadable.
+    """
+    for site in payload.get("sites", []):
+        evidence = site.get("evidence")
+        if evidence is None:
+            continue
+
+        site_id = site.get("site_id")
+
+        if not isinstance(evidence, dict):
+            report.fail(20, "site {} has evidence {!r}, not an object".format(
+                site_id, evidence))
+            continue
+
+        has_imagery = evidence.get("has_imagery")
+        if not isinstance(has_imagery, bool):
+            report.fail(20, "site {} evidence.has_imagery is {!r}, not a boolean".format(
+                site_id, has_imagery))
+            continue
+
+        # No imagery is a complete, valid state. Nothing else is required.
+        if not has_imagery:
+            continue
+
+        for field in EVIDENCE_REQUIRED_FIELDS:
+            if field not in evidence:
+                report.fail(20, "site {} evidence claims imagery but omits {}".format(
+                    site_id, field))
+
+        mode = evidence.get("inference_mode")
+        if mode is not None and mode not in VALID_INFERENCE_MODES:
+            report.fail(20, "site {} has inference_mode {!r}, not one of {}".format(
+                site_id, mode, sorted(VALID_INFERENCE_MODES)))
+
+        defect_class = evidence.get("defect_class")
+        if defect_class is not None and not isinstance(defect_class, str):
+            report.fail(20, "site {} evidence.defect_class is {!r}, not a string".format(
+                site_id, defect_class))
+
+
 def check_trip_groups(payload, report):
     """Rule 18 — trip groups partition the fleet and agree with the saving.
 
@@ -596,6 +660,7 @@ ALL_CHECKS = [
     check_data_status_values,
     check_confidence_range,
     check_score_types,
+    check_evidence_block,
     check_trip_groups,
     check_roi_is_not_multiplied,
 ]

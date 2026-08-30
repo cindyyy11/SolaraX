@@ -505,5 +505,87 @@ class TestRoiNotMultiplied(unittest.TestCase):
         run_checks(payload)  # must not raise
 
 
+class TestEvidenceBlock(unittest.TestCase):
+    """Rule 20, Schema section 8.8. The block is optional, so the validator was
+    silent on it entirely — which is how `inference_mode: "interactive"` reached
+    a pushed branch without anything objecting."""
+
+    def flagged_site(self, payload):
+        """The first site carrying a detection block — evidence corroborates a
+        site the electrical signal already flagged."""
+        for site in payload["sites"]:
+            if site.get("detection"):
+                return site
+        self.fail("fixture has no flagged site")
+
+    def test_absent_evidence_is_valid(self):
+        """Most sites have no imagery. That is the normal case, not a failure."""
+        payload = minimal_valid_payload()
+        self.assertFalse(failures_mentioning(run_checks(payload), "evidence"))
+
+    def test_has_imagery_false_needs_nothing_else(self):
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {"has_imagery": False}
+        self.assertFalse(failures_mentioning(run_checks(payload), "evidence"))
+
+    def test_valid_block_passes(self):
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {
+            "has_imagery": True,
+            "defect_class": "Hot-Spot",
+            "confidence": 0.94,
+            "model_note": "YOLOv8n-cls fine-tuned on Infrared Solar Modules",
+            "inference_mode": "batch",
+            "data_status": "SIMULATED",
+        }
+        self.assertFalse(failures_mentioning(run_checks(payload), "evidence", "inference_mode"))
+
+    def test_invented_inference_mode_is_caught(self):
+        """The live regression: the vision API returned "interactive", which is
+        not one of the two documented values."""
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {
+            "has_imagery": True,
+            "defect_class": "Hot-Spot",
+            "confidence": 0.94,
+            "model_note": "YOLOv8n-cls",
+            "inference_mode": "interactive",
+            "data_status": "SIMULATED",
+        }
+        self.assertTrue(failures_mentioning(run_checks(payload), "inference_mode"))
+
+    def test_claimed_imagery_missing_a_field_is_caught(self):
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {
+            "has_imagery": True,
+            "defect_class": "Hot-Spot",
+            "confidence": 0.94,
+        }
+        self.assertTrue(failures_mentioning(run_checks(payload), "inference_mode"))
+
+    def test_non_boolean_has_imagery_is_caught(self):
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {"has_imagery": "yes"}
+        self.assertTrue(failures_mentioning(run_checks(payload), "has_imagery"))
+
+    def test_confidence_outside_range_is_still_caught(self):
+        """Rule 14 walks every object, so it should reach inside evidence too."""
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = {
+            "has_imagery": True,
+            "defect_class": "Hot-Spot",
+            "confidence": 94,
+            "model_note": "YOLOv8n-cls",
+            "inference_mode": "live",
+            "data_status": "SIMULATED",
+        }
+        self.assertTrue(failures_mentioning(run_checks(payload), "confidence"))
+
+    def test_evidence_that_is_not_an_object_does_not_crash(self):
+        payload = minimal_valid_payload()
+        self.flagged_site(payload)["evidence"] = "Hot-Spot"
+        run_checks(payload)  # must not raise
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

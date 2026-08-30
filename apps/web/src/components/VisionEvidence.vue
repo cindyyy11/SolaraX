@@ -4,6 +4,14 @@ import {
   predictVision,
   type VisionPrediction,
 } from '@/services/api'
+// Which site the reader is looking at. The classifier does not use it — an
+// uploaded image never changes detection, economics or ranking (CLAUDE.md
+// anti-goal: imagery is corroborating evidence, never a trigger). It is here
+// so the result on screen is attributable to a site rather than floating free.
+const props = defineProps<{
+  siteId: string
+  siteName: string
+}>()
 
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref<string | null>(null)
@@ -64,8 +72,16 @@ async function analyseImage() {
 
     <p class="vision__description">
       Upload a thermal solar-module image to classify
-      potential visual evidence of a defect.
+      potential visual evidence of a defect at
+      {{ props.siteName }} ({{ props.siteId }}).
     </p>
+
+    <p class="vision__note">
+      Corroborating evidence only. The dispatch ranking is
+      set by the electrical signal and does not change
+      because an image was uploaded.
+    </p>
+
 
     <input
       type="file"
@@ -156,6 +172,12 @@ async function analyseImage() {
 
 .vision__description {
   margin: 0 0 1rem;
+  color: var(--text-secondary);
+}
+
+.vision__note {
+  margin: 0 0 1rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
