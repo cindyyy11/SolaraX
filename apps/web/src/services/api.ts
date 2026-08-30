@@ -12,7 +12,15 @@
  */
 
 import { toHttpError, HttpError } from './httpError'
-import type { Dispatch, Site, Cohort, CohortSeriesRow, SiteStatus, TripGroup } from '@/types/dispatch'
+import type {
+  Dispatch,
+  Site,
+  Cohort,
+  CohortSeriesRow,
+  SiteStatus,
+  TripGroup,
+  DataStatus,
+} from '@/types/dispatch'
 
 /** Major version this frontend was written against. A mismatch is a loud warning. */
 const EXPECTED_SCHEMA_MAJOR = '1'
@@ -164,6 +172,43 @@ export function cohortLines(rows: CohortSeriesRow[]): CohortLine[] {
  */
 export function sortedTripGroups(groups: TripGroup[]): TripGroup[] {
   return [...groups].sort((a, b) => b.site_count - a.site_count)
+}
+
+export interface CohortCoverageRow {
+  cohortId: string
+  label: string
+  memberCount: number
+  analysedCount: number
+  meetsMinimum: boolean
+  dataStatus: DataStatus
+  excludedSites: Array<{ siteId: string; name: string; reason: string }>
+}
+
+/**
+ * Per-cohort analysis coverage — the Scalability rubric's "gets more accurate
+ * as the fleet grows" claim, shown with real numbers instead of asserted in a
+ * deck. A cohort excluding a site names it and why, rather than silently
+ * shrinking `analysed_count` with no explanation on screen.
+ */
+export function cohortCoverage(cohorts: Cohort[], sites: Site[]): CohortCoverageRow[] {
+  const siteById = new Map(sites.map((site) => [site.site_id, site]))
+
+  return cohorts.map((cohort) => ({
+    cohortId: cohort.cohort_id,
+    label: cohort.label,
+    memberCount: cohort.member_count,
+    analysedCount: cohort.analysed_count,
+    meetsMinimum: cohort.meets_minimum,
+    dataStatus: cohort.data_status,
+    excludedSites: cohort.excluded_site_ids.map((siteId) => {
+      const site = siteById.get(siteId)
+      return {
+        siteId,
+        name: site?.name ?? siteId,
+        reason: site?.excluded_from_analysis?.reason ?? 'Excluded from peer analysis',
+      }
+    }),
+  }))
 }
 
 // --- Formatting -------------------------------------------------------------
