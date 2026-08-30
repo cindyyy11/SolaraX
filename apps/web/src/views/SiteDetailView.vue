@@ -36,6 +36,7 @@ import PerformanceModel from '@/components/PerformanceModel.vue'
 import SiteComparison from '@/components/SiteComparison.vue'
 import SiteDigitalTwin from '@/components/SiteDigitalTwin.vue'
 import ScenarioLab from '@/components/ScenarioLab.vue'
+import type { ScenarioResult } from '@/types/scenario'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -43,6 +44,12 @@ const isLoading = ref(true)
 
 /** Whether an M5 vision service is reachable from wherever this is served. */
 const visionAvailable = isVisionApiConfigured()
+const scenarioResult = ref<ScenarioResult | undefined>()
+const scenarioLabel = ref('')
+function updateScenario(payload: { label: string; result: ScenarioResult }) {
+  scenarioLabel.value = payload.label
+  scenarioResult.value = payload.result
+}
 
 onMounted(async () => {
   const result = await loadDispatch()
@@ -126,8 +133,8 @@ const cohort = computed(() => {
       </NoticeCallout>
 
       <PerformanceModel :site="site" />
-      <SiteDigitalTwin :site="site" />
-      <ScenarioLab :site="site" />
+      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-label="scenarioLabel" />
+      <ScenarioLab :site="site" @change="updateScenario" />
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->

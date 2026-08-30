@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { Box, Camera, CircleStop, Play, RotateCcw, ScanLine } from '@lucide/vue'
 import type { Site } from '@/types/dispatch'
+import type { ScenarioResult } from '@/types/scenario'
 
-const props = defineProps<{ site: Site }>()
+const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string }>()
 
 type CameraPreset = 'overview' | 'roof' | 'anomaly' | 'drone'
 
@@ -26,7 +27,7 @@ const activeStage = ref(0)
 const isPlaying = ref(false)
 let replayTimer: ReturnType<typeof setInterval> | null = null
 
-const hasAnomaly = computed(() => props.site.status !== 'healthy')
+const hasAnomaly = computed(() => props.site.status !== 'healthy' || Boolean(props.scenario))
 const riskValue = computed(() => props.site.economics?.rm_at_risk_monthly ?? 0)
 const lossPercent = computed(() => props.site.economics?.loss_pct_of_expected ?? 0)
 
@@ -113,7 +114,7 @@ onBeforeUnmount(stopReplay)
                 class="panel-cell"
                 :class="{
                   'panel-cell--anomaly': hasAnomaly && panel === 15,
-                  'panel-cell--scanned': activeStage >= 2,
+                  'panel-cell--scanned': activeStage >= 2 || Boolean(scenario),
                 }"
               >
                 <i></i><i></i><i></i>
@@ -134,6 +135,7 @@ onBeforeUnmount(stopReplay)
             <span>Illustrative model</span>
             <strong>{{ site.name }}</strong>
             <small>{{ site.capacity_kwp.toLocaleString() }} kWp · {{ site.status }}</small>
+            <small v-if="scenarioLabel && scenario" class="scene-readout__scenario">{{ scenarioLabel }} · {{ scenario.responseLabel }}</small>
           </div>
           <div class="scene-legend">
             <span><i class="legend-dot legend-dot--flow"></i> Energy path</span>
@@ -238,6 +240,7 @@ onBeforeUnmount(stopReplay)
 .scene-readout { position: absolute; left: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .1rem; padding: .65rem .75rem; background: rgba(7, 16, 14, .86); border: 1px solid rgba(255,255,255,.1); border-radius: var(--radius-sm); }
 .scene-readout span { color: #7be0a5; font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .scene-readout strong { font-size: .82rem; } .scene-readout small { color: #aebdb8; font-size: .65rem; text-transform: capitalize; }
+.scene-readout__scenario { color: #efb866 !important; text-transform: none !important; }
 .scene-legend { position: absolute; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .35rem; color: #aebdb8; font-size: .62rem; }
 .legend-dot { display: inline-block; width: 7px; height: 7px; margin-right: .25rem; border-radius: 50%; } .legend-dot--flow { background: #7be0a5; } .legend-dot--risk { background: #ff6a55; }
 .incident { padding: 1.2rem; background: #101b18; }
