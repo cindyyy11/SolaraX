@@ -12,11 +12,11 @@ Turn Spatial Operations into a credible guided inspection cockpit: scenario-spec
 
 The polished lightweight scene is the default Operational view. A synchronized Interactive 3D view uses the lazy-loaded Three.js renderer for orbit and exploration. Both views expose the same scenario, route, waypoint, severity, summary, and evidence state. Switching views preserves the current inspection context. Operational view remains available when WebGL is loading, unsupported, or lost.
 
-The simulation toolbar contains a clear `Operational | Interactive 3D` switch. Overview, Array, Anomaly, and Drone Route camera controls operate within the selected renderer and may never target a hidden scene. Operational view leads daily use; Interactive 3D is an optional exploration layer.
+The simulation toolbar contains a clear `Operational | Interactive 3D` switch. There is no separate Explore mode. Interactive 3D always supports direct drag rotation, wheel or pinch zoom, waypoint selection, camera presets, and camera reset. Overview, Array, Anomaly, and Drone Route controls operate within the selected renderer and may never target a hidden scene.
 
 The scene supports illustrative warehouse roof, commercial complex, and ground-mounted array configurations. Site selection may choose a configuration for demonstration variety, but the interface must state that building, equipment, route, and defect geometry are simulated.
 
-Scenario severity changes the visible affected area and intensity as well as the bounded calculation. The active scenario receives a prominent scene label and a concise explanation of what changed. Scenario selection changes camera framing, environment, equipment state, route geometry, and drone behavior:
+Scenario severity changes the visible affected area and intensity as well as the bounded calculation. A `Baseline | Scenario` comparison control lets the user verify the change without resetting inputs. The active scenario receives a prominent scene banner and a concise explanation showing affected equipment, projected loss, severity, and response. Applying a scenario performs a short baseline-to-scenario transition. Scenario selection changes camera framing, environment, equipment state, route geometry, and drone behavior:
 
 - Soiling: full-array serpentine survey with distributed dust coverage.
 - Partial shading: perimeter and obstruction pass with a visible shadow path.
@@ -29,7 +29,11 @@ Scenario severity changes the visible affected area and intensity as well as the
 
 Each guided route contains typed waypoints. Selecting a waypoint pauses the drone, frames the relevant region, and explains what the operator should verify. The route timeline provides previous, next, play, pause, and reset controls. Route geometry must be visibly different between scenarios rather than reusing a generic loop.
 
-Explore mode adds orbit controls and optional manual drone positioning. It is secondary to Guided Inspection mode, visibly labelled illustrative, and cannot change scenario calculations or evidence state.
+Direct camera navigation and waypoint selection cannot change scenario calculations or evidence state. Drone movement remains guided by the selected inspection route; users navigate the scene and inspection points rather than manually piloting the aircraft.
+
+## Spatial Operations flow
+
+Desktop uses compact scenario controls on the left and a dominant simulation on the right. Route controls and the impact summary attach directly to the simulation. Evidence verification and the next operational action follow below the workspace. Mobile order is scenario controls, simulation, impact, evidence, action. The workspace uses one main heading and avoids duplicated simulation cards or hidden navigation modes.
 
 ## Computer-vision verification
 
@@ -51,7 +55,7 @@ CV evidence never automatically changes site status, fleet ranking, economics, o
 
 ## State and component boundaries
 
-`SpatialOperations` owns selected scenario state, severity, route, active waypoint, guided/explore mode, and evidence focus. Scenario definitions provide typed visual configuration and route waypoints. The renderer receives these projections and emits interaction intent; it does not calculate business values.
+`SpatialOperations` owns selected scenario state, severity, route, active waypoint, Operational/Interactive 3D view, baseline/scenario comparison, and evidence focus. Scenario definitions provide typed visual configuration and route waypoints. The renderer receives these projections and emits interaction intent; it does not calculate business values.
 
 The WebGL scene, CSS fallback, route controls, CV intake, CV review, and operator decision are isolated components with typed interfaces. CV sends a focus request rather than mutating scene or dispatch state directly.
 
@@ -71,10 +75,12 @@ The WebGL scene, CSS fallback, route controls, CV intake, CV review, and operato
 1. Every supported scenario selects a distinct route, camera framing, and visible scene state.
 2. Severity visibly changes affected area or intensity without changing measured site data.
 3. Guided routes expose selectable waypoints with operational explanations.
-4. Explore mode is optional, interruptible, and cannot change evidence or calculations.
+4. Direct camera navigation is always available in Interactive 3D and cannot change evidence or calculations.
 5. WebGL loading or failure preserves the default Operational simulation and readable outputs.
 5a. Overview, Array, Anomaly, and Drone Route controls update the renderer currently visible to the user.
 5b. Operational and Interactive 3D views preserve the same scenario and waypoint when switching.
+5c. Baseline and Scenario comparison visibly changes the scene while preserving scenario inputs.
+5d. Severity changes the visible affected area or treatment intensity in both renderers.
 6. CV review keeps the original image visible and makes its operational question clear.
 7. Findings, confidence, image regions, and spatial focus remain synchronized where source coordinates permit it.
 8. Operator evidence decisions remain explicit and do not silently modify dispatch state.
