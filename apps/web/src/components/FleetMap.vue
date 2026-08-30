@@ -25,8 +25,25 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
-import { TriangleAlert, Diamond, CircleCheck } from '@lucide/vue'
+import { defineAsyncComponent } from 'vue'
+import { TriangleAlert, Diamond, CircleCheck, Box } from '@lucide/vue'
 import type { Site, SiteStatus } from '@/types/dispatch'
+
+/**
+ * Lazy on purpose. deck.gl alone is roughly 1 MB before gzip — bundling it
+ * into the eagerly-loaded main chunk means every visitor pays for it on the
+ * landing screen, whether or not they ever open the 3D tab. This keeps it in
+ * its own chunk, fetched only the first time someone clicks "3D".
+ */
+const FleetSkyline3D = defineAsyncComponent({
+  loader: () => import('@/components/FleetSkyline3D.vue'),
+  delay: 0,
+  // A cold chunk fetch is the one moment this tab is legitimately blank; name
+  // it so that reads as "loading" rather than "broken".
+  loadingComponent: {
+    template: '<p class="map-3d-loading">Loading 3D view…</p>',
+  },
+})
 
 const props = defineProps<{
   sites: Site[]
@@ -36,6 +53,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'select', siteId: string): void
+  /** Lets the parent screen give the 3D skyline more room — it is the one
+   *  view here where the extra dimension is wasted in a narrow sidebar. */
+  (event: 'view-change', view: MapViewMode): void
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -76,8 +96,8 @@ const BASEMAP = {
   aerial: `${ESRI_ROOT}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
 } as const
 
-type BasemapView = 'map' | 'aerial'
-const view = ref<BasemapView>('map')
+type MapViewMode = 'map' | 'aerial' | '3d'
+const view = ref<MapViewMode>('map')
 
 /**
  * Resolve the theme the same way theme.css does, and in the same order: an
@@ -98,14 +118,25 @@ function basemapUrl(): string {
   return prefersDark() ? BASEMAP.dark : BASEMAP.light
 }
 
+/**
+ * Covers all three view keys so it indexes on `MapViewMode` without a type
+ * guard at every call site. The '3d' entry is never actually shown here — the
+ * Leaflet tile layer is hidden (not attributed) while that view is active, and
+ * FleetSkyline3D's own Esri Imagery / world-atlas attribution takes over. It
+ * exists so ATTRIBUTION is a total function of the view, which is one honest
+ * fact instead of three places independently trusting the initial 'map'.
+ */
 const ATTRIBUTION = {
   map: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
   aerial:
     'Imagery &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  '3d': '',
 } as const
 
+/** '3d' has no Leaflet tile layer — the skyline is a separate WebGL canvas
+ *  handed its own attribution inside FleetSkyline3D. */
 function applyBasemap(): void {
-  if (!baseLayer) return
+  if (!baseLayer || view.value === '3d') return
   baseLayer.setUrl(basemapUrl())
   // Attribution is a licence condition, not decoration — it has to change with
   // the layer it credits.
@@ -114,10 +145,16 @@ function applyBasemap(): void {
   map?.attributionControl.addTo(map)
 }
 
-function setView(next: BasemapView): void {
+function setView(next: MapViewMode): void {
   if (view.value === next) return
   view.value = next
   applyBasemap()
+  emit('view-change', next)
+  // Leaflet's tile canvas is sized once on mount; toggling away to the 3D
+  // panel and back changes this container's box without Leaflet knowing, so
+  // its internal size cache goes stale and tiles render into the wrong
+  // bounds until interacted with.
+  if (next !== '3d') requestAnimationFrame(() => map?.invalidateSize())
 }
 
 /**
@@ -219,11 +256,8 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  // OpenStreetMap standard tiles: keyless and requires no account. CARTO's
-  // basemaps now watermark unauthenticated tiles with "API KEY REQUIRED",
-  // and a judged public URL must not depend on a key we'd have to ship.
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  baseLayer = L.tileLayer(basemapUrl(), {
+    attribution: ATTRIBUTION[view.value],
     maxZoom: 19,
   }).addTo(map)
 
@@ -284,11 +318,17 @@ watch(
 <template>
   <div class="map-frame">
     <div class="map-shell" :data-view="view">
-      <div ref="container" class="map-canvas"></div>
+      <div v-show="view !== '3d'" ref="container" class="map-canvas"></div>
+      <FleetSkyline3D
+        v-if="view === '3d'"
+        :sites="sites"
+        :active-site-id="activeSiteId"
+        @select="(id) => emit('select', id)"
+      />
 
       <!--
-        Two named views rather than an unlabelled icon: "Aerial" tells a first-
-        time viewer what they will get, which an icon-only toggle does not.
+        Three named views rather than unlabelled icons: a first-time viewer
+        cannot guess what "3D" gives them without the word, let alone an icon.
       -->
       <div class="map-views" role="group" aria-label="Basemap">
         <button
@@ -309,9 +349,18 @@ watch(
         >
           Aerial
         </button>
+        <button
+          type="button"
+          class="map-views__button map-views__button--3d"
+          :class="{ 'map-views__button--active': view === '3d' }"
+          :aria-pressed="view === '3d'"
+          @click="setView('3d')"
+        >
+          <Box :size="12" aria-hidden="true" /> 3D
+        </button>
       </div>
     </div>
-    <p class="map-legend">
+    <p v-if="view !== '3d'" class="map-legend">
       <span class="map-legend__item">
         <TriangleAlert class="map-legend__glyph map-legend__glyph--dispatch" :size="13" aria-hidden="true" />
         dispatch
@@ -326,7 +375,7 @@ watch(
       </span>
       <span class="map-legend__hint">
         numbered circles group nearby sites — click to fan out, then zoom in on Aerial to see the
-        array itself
+        array itself, or switch to 3D for a risk skyline
       </span>
     </p>
   </div>
@@ -404,6 +453,12 @@ watch(
   border-left: 1px solid var(--border-hairline);
 }
 
+.map-views__button--3d {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
 .map-views__button:hover {
   color: var(--text-primary);
   background: var(--callout-info-bg);
@@ -457,6 +512,21 @@ watch(
   flex-basis: 100%;
   color: var(--text-muted);
   opacity: 0.8;
+}
+
+.map-3d-loading {
+  display: grid;
+  place-items: center;
+  height: 480px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .map-3d-loading {
+    height: 360px;
+  }
 }
 </style>
 
