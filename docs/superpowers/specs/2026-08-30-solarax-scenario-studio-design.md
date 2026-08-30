@@ -36,6 +36,12 @@ The default mode remains a calm, warm editorial operations workspace. It priorit
 
 Scenario Lab is an explicit workspace for exploring bounded incidents. It shows scenario controls, before/after values, confidence, assumptions, evidence level, 3D state changes, and the recommended response. Reset always returns to the measured baseline.
 
+### Unified spatial workspace
+
+Scenario Lab and Site Simulation are one continuous Spatial Operations workspace, not separate cards or destinations. Desktop uses a compact control rail beside a dominant scene canvas, with an impact strip connecting the selected inputs to projected loss, confidence, and response. Mobile uses the same sequence in one card: controls, scene, impact, action. The workspace has one heading and one simulated-evidence disclosure.
+
+Scenario selection must cause an immediate and unmistakable scene transition. The scene briefly acknowledges the update, frames the affected layer, and changes physical presentation according to the scenario: dust coverage, obstruction shadow, string dimming, inverter warning, thermal scan, storm damage, heat stress, or grid restriction. These effects are illustrative and must never imply measured roof geometry or defect coordinates.
+
 ### Presentation Mode
 
 Presentation Mode uses the same state and data as the product, but provides a short guided sequence for judges or onboarding. It may choreograph camera movement, energy paths, drone flight, and evidence reveals. The mode is user-invoked, interruptible, and never the only path to information.
@@ -161,6 +167,8 @@ Scenario calculations are pure functions with unit tests for severity bounds, du
 
 1. A user can identify the highest-risk site from the default Operator Mode first viewport.
 2. A user can select one of the three scenario groups and see its evidence level, assumptions, before/after metrics, and response recommendation.
+2a. Scenario controls and the site scene appear in one continuous workspace without duplicated headings or a separate navigation action.
+2b. Every initial scenario produces a visually distinct scene state that remains understandable without relying on the scenario label alone.
 3. Scenario reset restores every measured value and scene state exactly.
 4. The site scene visibly distinguishes measured values from inferred and simulated geometry.
 5. Presentation Mode can replay the incident, be interrupted, and finish without changing the underlying dispatch record.
