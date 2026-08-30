@@ -16,7 +16,13 @@
  *    knowing before a judge finds out.
  */
 import { computed, onMounted, ref } from 'vue'
-import { loadDispatch, formatRinggit, isAssessed, sortedTripGroups } from '@/services/api'
+import {
+  loadDispatch,
+  formatRinggit,
+  isAssessed,
+  sortedTripGroups,
+  cohortCoverage,
+} from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
@@ -107,6 +113,11 @@ const statusSplit = computed(() => {
 
 /** Trip groups ranked by how many sites they cover — see sortedTripGroups. */
 const tripGroups = computed(() => sortedTripGroups(dispatch.value?.fleet_summary.trip_groups ?? []))
+
+/** Per-cohort analysis coverage — see cohortCoverage. */
+const cohortRows = computed(() =>
+  dispatch.value ? cohortCoverage(dispatch.value.cohorts, dispatch.value.sites) : [],
+)
 
 /** Money at risk by site, ranked. Shows how concentrated the exposure is. */
 const riskBySite = computed(() => {
@@ -387,38 +398,75 @@ const assumptionRows = computed(() => {
         {{ roi.co2e_factor_source }}
       </p>
 
-      <!-- Every constant, its value, and where it came from. -->
-      <section class="assumptions">
-        <h2 class="assumptions__title">Assumptions</h2>
-        <p class="assumptions__lead">
-          Read directly from <code>config/assumptions.json</code>, not hardcoded here.
-          {{ assumptions?.tier }}
-        </p>
+      <div class="panels">
+        <!-- Per-cohort analysis coverage — the Scalability claim, shown with real numbers. -->
+        <section v-if="cohortRows.length" class="chart panels__item">
+          <h2 class="chart__title">Cohort coverage</h2>
+          <ul class="cohorts">
+            <li v-for="cohort in cohortRows" :key="cohort.cohortId" class="cohorts__card">
+              <div class="cohorts__head">
+                <span class="cohorts__label">{{ cohort.label }}</span>
+                <DataStatusBadge :status="cohort.dataStatus" small />
+              </div>
+              <p class="cohorts__count">
+                {{ cohort.analysedCount }} of {{ cohort.memberCount }} sites analysed
+              </p>
+              <span
+                class="cohorts__chip"
+                :class="cohort.meetsMinimum ? 'cohorts__chip--good' : 'cohorts__chip--critical'"
+              >
+                {{ cohort.meetsMinimum ? 'meets minimum' : 'below minimum' }}
+              </span>
+              <p v-if="cohort.excludedSites.length" class="cohorts__excluded">
+                Excluded from peer analysis:
+                <span v-for="(site, index) in cohort.excludedSites" :key="site.siteId">
+                  {{ site.name }} ({{ site.reason }})<template
+                    v-if="index < cohort.excludedSites.length - 1"
+                    >, </template
+                  >
+                </span>
+              </p>
+            </li>
+          </ul>
+          <p class="chart__note">
+            Peer benchmarking's accuracy grows with cohort size — a cohort below its minimum
+            member count still runs, but with less statistical confidence.
+          </p>
+        </section>
 
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Constant</th>
-              <th class="table__num">Value</th>
-              <th class="table__num">Range</th>
-              <th>Source / rationale</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in assumptionRows" :key="row.key">
-              <td>
-                <code>{{ row.key }}</code>
-              </td>
-              <td class="table__num">{{ row.value }}</td>
-              <td class="table__num">
-                <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
-                <template v-else>—</template>
-              </td>
-              <td class="table__note">{{ row.note || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+        <!-- Every constant, its value, and where it came from. -->
+        <section class="assumptions panels__item">
+          <h2 class="assumptions__title">Assumptions</h2>
+          <p class="assumptions__lead">
+            Read directly from <code>config/assumptions.json</code>, not hardcoded here.
+            {{ assumptions?.tier }}
+          </p>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Constant</th>
+                <th class="table__num">Value</th>
+                <th class="table__num">Range</th>
+                <th>Source / rationale</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in assumptionRows" :key="row.key">
+                <td>
+                  <code>{{ row.key }}</code>
+                </td>
+                <td class="table__num">{{ row.value }}</td>
+                <td class="table__num">
+                  <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
+                  <template v-else>—</template>
+                </td>
+                <td class="table__note">{{ row.note || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
 
       <footer class="provenance">
         <p>{{ dispatch.meta.data_source }} · {{ dispatch.meta.source_note }}</p>
@@ -874,11 +922,88 @@ const assumptionRows = computed(() => {
 /* --- Assumptions --- */
 
 .assumptions {
-  margin-top: 2.5rem;
   padding: 1.25rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-md);
+}
+
+/* Cohort coverage sits beside Assumptions at wide viewports; both stack full
+   width below the breakpoint. */
+.panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+@media (min-width: 900px) {
+  .panels {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.panels__item {
+  margin-top: 0;
+}
+
+.cohorts {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.cohorts__card {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--page-plane);
+}
+
+.cohorts__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.cohorts__label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.cohorts__count {
+  margin: 0.35rem 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.cohorts__chip {
+  display: inline-block;
+  padding: 0.15em 0.55em;
+  border-radius: var(--radius-sm);
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.cohorts__chip--good {
+  color: var(--status-good);
+}
+
+.cohorts__chip--critical {
+  color: var(--status-critical);
+}
+
+.cohorts__excluded {
+  margin: 0.5rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .assumptions__title {
