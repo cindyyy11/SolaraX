@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
 import BrandLogo from '@/components/BrandLogo.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 </script>
 
 <template>
@@ -15,6 +16,7 @@ import BrandLogo from '@/components/BrandLogo.vue'
           <RouterLink to="/">Dispatch</RouterLink>
           <RouterLink to="/fleet-health">Fleet health &amp; ROI</RouterLink>
         </span>
+        <ThemeToggle />
       </div>
     </nav>
 
@@ -73,6 +75,12 @@ import BrandLogo from '@/components/BrandLogo.vue'
   display: flex;
   gap: 1.4rem;
   font-size: 0.82rem;
+}
+
+/* The nav's own font is the display face — it is chrome, not data. */
+.app__links a,
+.app__tagline {
+  font-family: var(--font-display);
 }
 
 .app__links a {

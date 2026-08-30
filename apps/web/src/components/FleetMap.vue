@@ -56,11 +56,28 @@ const markersBySiteId = new Map<string, L.Marker>()
  * Both endpoints below need no key, and being desaturated they let the status
  * markers carry the only color on the map, which is the point of the screen.
  */
-const BASEMAP_ROOT = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
+const ESRI_ROOT = 'https://server.arcgisonline.com/ArcGIS/rest/services'
 const BASEMAP = {
-  light: `${BASEMAP_ROOT}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-  dark: `${BASEMAP_ROOT}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  light: `${ESRI_ROOT}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  dark: `${ESRI_ROOT}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  /**
+   * AERIAL IS THE ONE HONEST WAY TO "SHOW THE PRODUCT".
+   *
+   * PVDAQ publishes no panel positions, no array geometry and no site plans —
+   * which is why `CLAUDE.md` forbids rendering a panel grid, and why a 3D model
+   * of a site would be invented geometry in a product whose whole claim is that
+   * it needs no site-grade instrumentation.
+   *
+   * Satellite imagery is the opposite: it is a real photograph of the real
+   * roof at coordinates the dataset actually contains. Zoom into the Agassi
+   * Academy and the arrays are there, in the world, unretouched. Nothing is
+   * modelled and nothing is claimed.
+   */
+  aerial: `${ESRI_ROOT}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
 } as const
+
+type BasemapView = 'map' | 'aerial'
+const view = ref<BasemapView>('map')
 
 /**
  * Resolve the theme the same way theme.css does, and in the same order: an
@@ -75,8 +92,32 @@ function prefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
+/** Aerial imagery is photographic and ignores the theme; the canvas follows it. */
+function basemapUrl(): string {
+  if (view.value === 'aerial') return BASEMAP.aerial
+  return prefersDark() ? BASEMAP.dark : BASEMAP.light
+}
+
+const ATTRIBUTION = {
+  map: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+  aerial:
+    'Imagery &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+} as const
+
 function applyBasemap(): void {
-  baseLayer?.setUrl(prefersDark() ? BASEMAP.dark : BASEMAP.light)
+  if (!baseLayer) return
+  baseLayer.setUrl(basemapUrl())
+  // Attribution is a licence condition, not decoration — it has to change with
+  // the layer it credits.
+  baseLayer.options.attribution = ATTRIBUTION[view.value]
+  map?.attributionControl.remove()
+  map?.attributionControl.addTo(map)
+}
+
+function setView(next: BasemapView): void {
+  if (view.value === next) return
+  view.value = next
+  applyBasemap()
 }
 
 /**
@@ -178,8 +219,8 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  baseLayer = L.tileLayer(prefersDark() ? BASEMAP.dark : BASEMAP.light, {
-    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+  baseLayer = L.tileLayer(basemapUrl(), {
+    attribution: ATTRIBUTION[view.value],
     maxZoom: 19,
   }).addTo(map)
 
@@ -239,7 +280,34 @@ watch(
 
 <template>
   <div class="map-frame">
-    <div ref="container" class="map-canvas"></div>
+    <div class="map-shell" :data-view="view">
+      <div ref="container" class="map-canvas"></div>
+
+      <!--
+        Two named views rather than an unlabelled icon: "Aerial" tells a first-
+        time viewer what they will get, which an icon-only toggle does not.
+      -->
+      <div class="map-views" role="group" aria-label="Basemap">
+        <button
+          type="button"
+          class="map-views__button"
+          :class="{ 'map-views__button--active': view === 'map' }"
+          :aria-pressed="view === 'map'"
+          @click="setView('map')"
+        >
+          Map
+        </button>
+        <button
+          type="button"
+          class="map-views__button"
+          :class="{ 'map-views__button--active': view === 'aerial' }"
+          :aria-pressed="view === 'aerial'"
+          @click="setView('aerial')"
+        >
+          Aerial
+        </button>
+      </div>
+    </div>
     <p class="map-legend">
       <span class="map-legend__item">
         <TriangleAlert class="map-legend__glyph map-legend__glyph--dispatch" :size="13" aria-hidden="true" />
@@ -253,7 +321,10 @@ watch(
         <CircleCheck class="map-legend__glyph map-legend__glyph--healthy" :size="13" aria-hidden="true" />
         healthy
       </span>
-      <span class="map-legend__hint">numbered circles group nearby sites — click to fan out</span>
+      <span class="map-legend__hint">
+        numbered circles group nearby sites — click to fan out, then zoom in on Aerial to see the
+        array itself
+      </span>
     </p>
   </div>
 </template>
@@ -281,6 +352,10 @@ watch(
  * the zoom — width still decides that — but it stops the map from paying for
  * latitude nobody is looking at.
  */
+.map-shell {
+  position: relative;
+}
+
 .map-canvas {
   height: 320px;
   width: 100%;
@@ -290,6 +365,57 @@ watch(
   .map-canvas {
     height: 260px;
   }
+}
+
+/* Above Leaflet's own panes (400) and controls (800), below the app nav (20
+   on a different stacking context) — see the z-index note in theme.css. */
+.map-views {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 900;
+  display: flex;
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+
+.map-views__button {
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.map-views__button + .map-views__button {
+  border-left: 1px solid var(--border-hairline);
+}
+
+.map-views__button:hover {
+  color: var(--text-primary);
+  background: var(--callout-info-bg);
+}
+
+/* The selected view is the one place a segmented control needs the accent —
+   it is a selection state, which is the role brand colour plays here. */
+.map-views__button--active {
+  background: var(--action-fill);
+  color: var(--action-ink);
+}
+
+.map-views__button--active:hover {
+  background: var(--action-fill-hover);
+  color: var(--action-ink);
 }
 
 .map-legend {
@@ -352,6 +478,20 @@ watch(
   filter:
     drop-shadow(0 0 2px var(--surface-1, #fff))
     drop-shadow(0 0 2px var(--surface-1, #fff));
+}
+
+/*
+ * Aerial imagery is photographic and mostly dark, so the ring cannot follow
+ * the theme here: in dark mode --surface-1 is near-black and the halo would
+ * vanish into the satellite photo exactly where the marker needs separating
+ * from it. Pinned white, and strengthened, because a rooftop is a far busier
+ * backdrop than a flat canvas.
+ */
+.map-shell[data-view='aerial'] .fleet-marker svg {
+  filter:
+    drop-shadow(0 0 2px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.85))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .fleet-marker--active {

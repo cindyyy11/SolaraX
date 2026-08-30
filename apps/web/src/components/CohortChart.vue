@@ -117,8 +117,12 @@ function buildOption(): echarts.EChartsCoreOption {
         // of the line, with a plate behind it so it stays readable where it
         // crosses the peer lines.
         rotate: 0,
-        position: 'start',
-        distance: 6,
+        // 'end' is the TOP of a vertical marker. 'start' put it on the axis,
+        // where it covered two date ticks; the top of the line is the only
+        // clear space, and the markArea's own label is centred in the shaded
+        // region rather than at its left edge, so the two do not collide.
+        position: 'end',
+        distance: 4,
         align: 'left',
         backgroundColor: t.surface,
         padding: [3, 5],

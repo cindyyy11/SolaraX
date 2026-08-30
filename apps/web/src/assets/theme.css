@@ -116,7 +116,12 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-full: 999px;
-  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Type — see fonts.css for why these two faces and why they are self-hosted.
+     The fallback stacks are chosen to be metrically close so the one reflow
+     when the webfont lands is small rather than a visible jump. */
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Sans Variable', 'Inter Variable', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -201,7 +206,21 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   min-height: 100vh;
+  /* This product is almost entirely numbers in columns. Tabular figures stop
+     a ringgit total from shifting width as its digits change. */
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The display face carries headings; the data face carries everything else.
+   Set once here rather than per component, so a heading anywhere in the
+   product speaks with the same voice. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
 }
 
 * {
