@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
-  "buildCommand": "cd apps/web && npm ci && npm run build",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "echo 'install handled inside buildCommand (monorepo: app lives in apps/web)'",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci",
   "framework": null,
 
   "rewrites": [
