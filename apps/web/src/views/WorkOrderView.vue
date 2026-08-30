@@ -317,7 +317,7 @@ function printCard(): void {
 </script>
 
 <template>
-  <main class="screen">
+  <main class="screen screen--narrow">
     <section v-if="isLoading" class="load-state" aria-live="polite">
       <span class="load-state__pulse"></span>
       <div>
@@ -346,7 +346,7 @@ function printCard(): void {
         <RouterLink :to="`/site/${site.site_id}`" class="crumbs__link">Site detail</RouterLink>
         <button
           type="button"
-          class="print-button"
+          class="btn-primary print-button"
           title="Opens your browser's print dialog — choose “Save as PDF” as the destination."
           @click="printCard"
         >
@@ -679,7 +679,7 @@ function printCard(): void {
               </div>
 
               <div class="field no-print">
-                <button type="button" class="save-button" @click="saveFindings">
+                <button type="button" class="btn-primary save-button" @click="saveFindings">
                   Save findings
                 </button>
                 <span v-if="savedAt" class="field__saved"
@@ -752,12 +752,6 @@ function printCard(): void {
 </template>
 
 <style scoped>
-.screen {
-  max-width: var(--container-narrow);
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 /* --- Loading / missing states — same idiom as the Dispatch List's
      .load-state, so a slow network reads the same way everywhere. --- */
 
@@ -837,35 +831,11 @@ function printCard(): void {
 
 /* The primary action on each of the two places it appears: print the card,
    and commit the findings. Amber fill + navy ink, matching the work-order
-   button on Site Detail — one action treatment across the product. */
-.print-button,
-.save-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+   button on Site Detail — one action treatment across the product. Visual
+   idiom now comes from .btn-primary (assets/layout.css); only placement
+   survives here. */
+.print-button {
   margin-left: auto;
-  padding: 0.5rem 0.9rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border: none;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.print-button:hover,
-.save-button:hover {
-  background: var(--action-fill-hover);
-}
-
-.print-button:active,
-.save-button:active {
-  transform: scale(0.97);
 }
 
 .save-button {

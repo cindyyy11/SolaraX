@@ -144,8 +144,9 @@
 
   /* Spacing — 4px rhythm, extends the --icon-xs/sm/md/lg naming precedent
      above. Not retrofitted across every existing margin/padding in this
-     pass — used by the shared primitives in assets/layout.css and any new
-     spacing this pass adds. */
+     pass. Defined now for future use — not yet consumed by any rule in
+     this pass, including assets/layout.css, which still uses hardcoded
+     rem values. */
   --space-3xs: 0.25rem;  /* 4px */
   --space-2xs: 0.5rem;   /* 8px */
   --space-xs: 0.75rem;   /* 12px */
