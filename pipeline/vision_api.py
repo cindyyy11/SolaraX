@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import tempfile
 
@@ -13,10 +14,31 @@ app = FastAPI(
 )
 
 
-# Allow the Vue development server to call this API.
+# Browser origins allowed to call this API.
+#
+# The defaults cover the Vue dev server and the deployed dashboard. When the API
+# is hosted (Hugging Face Space), set VISION_ALLOWED_ORIGINS on the host to a
+# comma-separated list to override without a code change. The regex additionally
+# lets Vercel preview deployments through, whose subdomain changes per branch.
+_DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://solara-x-inky.vercel.app",
+]
+
+_allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "VISION_ALLOWED_ORIGINS",
+        ",".join(_DEFAULT_ALLOWED_ORIGINS),
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
