@@ -22,7 +22,7 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const isDragging = ref(false)
 const validationMessage = ref<string | null>(null)
-const reviewState = ref<'unreviewed' | 'confirmed' | 'needs-review'>('unreviewed')
+const reviewState = ref<'unreviewed' | 'confirmed' | 'needs-review' | 'not-supported'>('unreviewed')
 
 const confidencePercent = computed(() =>
   prediction.value ? Math.round(prediction.value.evidence.confidence * 100) : 0,
@@ -32,6 +32,12 @@ const confidenceLabel = computed(() => {
   if (confidencePercent.value >= 55) return 'Review recommended'
   return 'Low confidence'
 })
+const decisionMessage = computed(() => ({
+  confirmed: 'Evidence recorded as supporting the current dispatch recommendation.',
+  'needs-review': 'Field verification remains required before acting on this image.',
+  'not-supported': 'This image does not support the current dispatch recommendation. Electrical evidence remains unchanged.',
+  unreviewed: 'Review the model signal and record an operator decision.',
+}[reviewState.value]))
 
 function clearPreview() {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
@@ -110,14 +116,13 @@ onBeforeUnmount(clearPreview)
 
 <template>
   <section class="vision">
-    <h2 class="vision__title">
-      Computer vision evidence
-    </h2>
+    <div class="vision__heading">
+      <div><h2 class="vision__title">Does this image support dispatch?</h2><p>Computer vision evidence · {{ props.siteName }}</p></div>
+      <span>HUMAN REVIEW REQUIRED</span>
+    </div>
 
     <p class="vision__description">
-      Upload a thermal solar-module image to classify
-      potential visual evidence of a defect at
-      {{ props.siteName }} ({{ props.siteId }}).
+      Upload a thermal solar-module image to test whether visual evidence supports the current recommendation for {{ props.siteId }}.
     </p>
 
     <p class="vision__note">
@@ -161,6 +166,7 @@ onBeforeUnmount(clearPreview)
     </p>
 
    <div v-if="prediction" class="vision__result">
+  <div class="vision__result-head"><div><span>ANALYSIS SUMMARY</span><h3>{{ prediction.evidence.defect_class === 'Unknown' ? 'Inconclusive image' : prediction.evidence.defect_class }}</h3></div><strong>{{ confidencePercent }}%<small>{{ confidenceLabel }}</small></strong></div>
   <template v-if="prediction.evidence.defect_class === 'Unknown'">
     <p>
       <strong>Unable to classify image.</strong>
@@ -176,29 +182,7 @@ onBeforeUnmount(clearPreview)
   </template>
 
   <template v-else>
-    <p>
-      <strong>Predicted class:</strong>
-      {{ prediction.evidence.defect_class }}
-    </p>
-
-    <p>
-      <strong>Confidence:</strong> {{ confidencePercent }}% · {{ confidenceLabel }}
-    </p>
-
-    <p>
-      <strong>Model:</strong>
-      {{ prediction.evidence.model_note }}
-    </p>
-
-    <p>
-      <strong>Inference mode:</strong>
-      {{ prediction.evidence.inference_mode }}
-    </p>
-
-    <p>
-      <strong>Data status:</strong>
-      {{ prediction.evidence.data_status }}
-    </p>
+    <dl class="vision__metadata"><div><dt>Model</dt><dd>{{ prediction.evidence.model_note }}</dd></div><div><dt>Inference mode</dt><dd>{{ prediction.evidence.inference_mode }}</dd></div><div><dt>Data status</dt><dd>{{ prediction.evidence.data_status }}</dd></div></dl>
   </template>
   <div class="vision__confidence" aria-label="Model confidence">
     <span :style="{ transform: `scaleX(${confidencePercent / 100})` }"></span>
@@ -208,6 +192,8 @@ onBeforeUnmount(clearPreview)
     <span>Operator review</span>
     <button type="button" :class="{ active: reviewState === 'confirmed' }" @click="reviewState = 'confirmed'">Supports dispatch</button>
     <button type="button" :class="{ active: reviewState === 'needs-review' }" @click="reviewState = 'needs-review'">Needs field verification</button>
+    <button type="button" :class="{ active: reviewState === 'not-supported' }" @click="reviewState = 'not-supported'">Does not support</button>
+    <p class="vision__decision-message" aria-live="polite">{{ decisionMessage }}</p>
   </div>
 </div>
   </section>
@@ -222,9 +208,14 @@ onBeforeUnmount(clearPreview)
 }
 
 .vision__title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  letter-spacing: -.025em;
 }
+.vision__heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.8rem; }
+.vision__heading p { margin:.3rem 0 0; color:var(--text-muted); font-size:.7rem; }
+.vision__heading > span { flex:0 0 auto; padding:.28rem .45rem; color:var(--action-ink); background:var(--action-fill); border-radius:var(--radius-sm); font-size:.55rem; font-weight:800; letter-spacing:.07em; }
 
 .vision__description {
   margin: 0 0 1rem;
@@ -327,6 +318,15 @@ onBeforeUnmount(clearPreview)
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-sm);
 }
+.vision__result-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding-bottom:.8rem; border-bottom:1px solid var(--border-hairline); }
+.vision__result-head span { color:var(--text-muted); font-size:.58rem; font-weight:800; letter-spacing:.08em; }
+.vision__result-head h3 { margin:.2rem 0 0; font-family:var(--font-display); font-size:1.2rem; letter-spacing:-.025em; }
+.vision__result-head > strong { text-align:right; font-family:var(--font-display); font-size:1.55rem; line-height:1; }
+.vision__result-head small { display:block; margin-top:.25rem; color:var(--text-muted); font:600 .62rem var(--font-sans); }
+.vision__metadata { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; margin:.85rem 0; }
+.vision__metadata div { min-width:0; padding:.65rem; background:var(--surface-2); border-radius:var(--radius-sm); }
+.vision__metadata dt { color:var(--text-muted); font-size:.62rem; }
+.vision__metadata dd { margin:.2rem 0 0; font-size:.72rem; overflow-wrap:anywhere; }
 
 .vision__result p {
   margin: 0.25rem 0;
@@ -338,15 +338,19 @@ onBeforeUnmount(clearPreview)
 .vision__decision span { width: 100%; color: var(--text-muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
 .vision__decision button { min-height: 40px; padding: .45rem .6rem; color: var(--text-secondary); background: transparent; border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); font: inherit; font-size: .7rem; cursor: pointer; }
 .vision__decision button.active { color: var(--action-ink); background: var(--action-fill); border-color: var(--action-fill); }
+.vision__decision-message { width:100%; margin:.25rem 0 0 !important; color:var(--text-secondary); font-size:.72rem; line-height:1.45; }
 
 .vision__error {
   color: var(--status-critical);
 }
 
 @media (max-width: 620px) {
+  .vision__heading { flex-direction:column; }
   .vision__review { grid-template-columns: 1fr; }
   .vision__preview { max-width: none; }
   .vision__review-actions { flex-direction: row; align-items: center; }
   .vision__button { flex: 1; justify-content: center; }
+  .vision__metadata { grid-template-columns:1fr; }
+  .vision__decision button { flex:1 1 100%; }
 }
 </style>
