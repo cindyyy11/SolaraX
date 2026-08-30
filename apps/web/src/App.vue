@@ -13,7 +13,7 @@ import SiteSearch from '@/components/SiteSearch.vue'
       <RouterLink to="/" class="app-rail__brand" aria-label="SolaraX — dispatch home">
         <BrandLogo :size="34" mark-only />
       </RouterLink>
-      <nav class="app-rail__nav">
+      <nav class="app-rail__nav" aria-label="Site sections">
         <RouterLink to="/" class="app-rail__link" aria-label="Dispatch">
           <LayoutDashboard :size="20" aria-hidden="true" /><span>Dispatch</span>
         </RouterLink>
@@ -51,7 +51,7 @@ import SiteSearch from '@/components/SiteSearch.vue'
   position: fixed;
   top: 0.75rem;
   left: 0.75rem;
-  z-index: 1000;
+  z-index: var(--z-skip-link);
   padding: 0.75rem 1rem;
   color: var(--action-ink);
   background: var(--action-fill);
@@ -71,7 +71,7 @@ import SiteSearch from '@/components/SiteSearch.vue'
 .app-rail {
   position: fixed;
   inset: 0 auto 0 0;
-  z-index: 40;
+  z-index: var(--z-nav);
   display: flex;
   width: 6.5rem;
   flex-direction: column;
@@ -163,7 +163,7 @@ import SiteSearch from '@/components/SiteSearch.vue'
   .mobile-header {
     position: fixed;
     inset: 0 0 auto;
-    z-index: 40;
+    z-index: var(--z-nav);
     display: grid;
     grid-template-columns: auto 1fr auto;
     min-height: 4.2rem;
@@ -189,14 +189,16 @@ import SiteSearch from '@/components/SiteSearch.vue'
     align-items: center;
     padding: 0 0.65rem;
     color: var(--text-secondary);
+    border: 1px solid transparent;
     border-radius: var(--radius-md);
     font-size: 0.78rem;
     font-weight: 650;
     text-decoration: none;
   }
   .mobile-header__nav a.router-link-exact-active {
-    color: var(--text-primary);
-    background: var(--surface-2);
+    color: var(--action-text);
+    background: var(--surface-selected);
+    border-color: var(--action-text);
   }
   .mobile-header :deep(.theme) {
     display: none;
