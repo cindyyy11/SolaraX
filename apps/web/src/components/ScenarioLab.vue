@@ -5,7 +5,7 @@ import type { Site } from '@/types/dispatch'
 import { runScenario, scenarioDefinitions } from '@/services/scenarioEngine'
 import type { ScenarioResult } from '@/types/scenario'
 
-const props = defineProps<{ site: Site }>()
+const props = defineProps<{ site: Site; embedded?: boolean }>()
 const emit = defineEmits<{ change: [{ id: string; label: string; result: ScenarioResult }] }>()
 const selectedId = ref(scenarioDefinitions[0]!.id)
 const severity = ref(scenarioDefinitions[0]!.parameters[0]!.defaultValue)
@@ -22,14 +22,18 @@ function reset() { selectScenario() }
 </script>
 
 <template>
-  <section class="lab" aria-labelledby="scenario-title">
-    <header class="lab__header">
+  <section class="lab" :class="{ 'lab--embedded': embedded }" aria-labelledby="scenario-title">
+    <header v-if="!embedded" class="lab__header">
       <div>
         <div class="lab__title"><SlidersHorizontal :size="18" aria-hidden="true" /><h2 id="scenario-title">Scenario lab</h2><span>SIMULATED</span></div>
         <p>Explore bounded what-if conditions without changing the measured dispatch record.</p>
       </div>
       <button type="button" class="lab__reset" @click="reset"><RotateCcw :size="14" aria-hidden="true" /> Reset</button>
     </header>
+    <div v-else class="lab__compact-head">
+      <div><h3 id="scenario-title">Scenario controls</h3><p>Change the condition and watch the site respond.</p></div>
+      <button type="button" class="lab__reset" @click="reset"><RotateCcw :size="14" aria-hidden="true" /> Reset</button>
+    </div>
     <div class="lab__body">
       <form class="lab__controls" @submit.prevent>
         <label for="scenario-select">Scenario</label>
@@ -57,6 +61,13 @@ function reset() { selectScenario() }
 
 <style scoped>
 .lab { margin: 1.5rem 0; padding: 1.15rem 1.25rem; background: var(--surface-1); border: 1px solid var(--border-hairline); border-radius: var(--radius-lg); box-shadow: var(--elevation-1); }
+.lab--embedded { height: 100%; margin: 0; padding: 1.15rem; border: 0; border-radius: 0; box-shadow: none; }
+.lab__compact-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; padding-bottom:1rem; border-bottom:1px solid var(--border-hairline); }
+.lab__compact-head h3 { margin:0; font-size:.95rem; }
+.lab__compact-head p { margin:.3rem 0 0; color:var(--text-secondary); font-size:.72rem; line-height:1.4; }
+.lab--embedded .lab__body { grid-template-columns:1fr; gap:1rem; }
+.lab--embedded .lab__result { grid-template-columns:repeat(2,1fr); }
+.lab--embedded .lab__response { grid-column:1 / -1; }
 .lab__header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border-hairline); }
 .lab__title { display:flex; align-items:center; gap:.5rem; } .lab h2 { margin:0; font-size:1.05rem; } .lab__title span { padding:.16rem .38rem; color:var(--action-ink); background:var(--action-fill); border-radius:var(--radius-sm); font-size:.58rem; font-weight:800; letter-spacing:.08em; }
 .lab__header p { margin:.4rem 0 0; color:var(--text-secondary); font-size:.8rem; }
