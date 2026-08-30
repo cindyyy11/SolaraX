@@ -16,7 +16,7 @@
  *    knowing before a judge finds out.
  */
 import { computed, onMounted, ref } from 'vue'
-import { loadDispatch, formatRinggit, isAssessed } from '@/services/api'
+import { loadDispatch, formatRinggit, isAssessed, sortedTripGroups } from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
@@ -104,6 +104,9 @@ const statusSplit = computed(() => {
     .filter((part) => part.key !== 'not_assessed' || part.count > 0)
     .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
 })
+
+/** Trip groups ranked by how many sites they cover — see sortedTripGroups. */
+const tripGroups = computed(() => sortedTripGroups(dispatch.value?.fleet_summary.trip_groups ?? []))
 
 /** Money at risk by site, ranked. Shows how concentrated the exposure is. */
 const riskBySite = computed(() => {
@@ -278,6 +281,27 @@ const assumptionRows = computed(() => {
           The value is as much in the {{ summary.visits_avoided }} sites not being visited as the
           {{ summary.dispatch_count }} that are — {{ summary.trips_avoided }} avoided site trips,
           because co-located sites are reached in one visit.
+        </p>
+      </section>
+
+      <!-- Trip groups make "N trips avoided" concrete: which sites, reached together. -->
+      <section v-if="tripGroups.length" class="chart">
+        <h2 class="chart__title">How the fleet groups into visits</h2>
+        <ul class="trips">
+          <li v-for="group in tripGroups" :key="group.trip_id" class="trips__row">
+            <span class="trips__label">{{ group.label }}</span>
+            <span class="trips__chip" :class="{ 'trips__chip--multi': group.site_count > 1 }">
+              {{ group.site_count }} site{{ group.site_count === 1 ? '' : 's' }}, 1 visit
+            </span>
+            <span v-if="group.dispatched" class="trips__tag"
+              >dispatched — not counted as avoided</span
+            >
+          </li>
+        </ul>
+        <p class="chart__note">
+          Sites within {{ assumptions?.same_trip_radius_km }} km are reached in one mobilisation.
+          A group already carrying a dispatched site is not counted as avoided — the technician
+          is going there regardless, so skipping its neighbours saves the drive, not the visit.
         </p>
       </section>
 
@@ -610,6 +634,55 @@ const assumptionRows = computed(() => {
   border-top: 1px solid var(--border-hairline);
   font-size: 0.76rem;
   line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.trips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trips__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-hairline);
+  font-size: 0.82rem;
+}
+
+.trips__row:last-child {
+  border-bottom: none;
+}
+
+.trips__label {
+  flex: 1 1 auto;
+  min-width: 10rem;
+  color: var(--text-secondary);
+}
+
+.trips__chip {
+  flex: none;
+  padding: 0.2em 0.6em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hairline);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Multi-site groups are the persuasive case — the same accent already
+   reserved for the two headline "trips avoided / saving" tiles. */
+.trips__chip--multi {
+  border-color: var(--action-fill);
+  color: var(--action-text);
+}
+
+.trips__tag {
+  flex: none;
+  font-size: 0.7rem;
   color: var(--text-muted);
 }
 

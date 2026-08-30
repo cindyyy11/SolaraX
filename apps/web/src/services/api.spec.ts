@@ -122,7 +122,7 @@ describe('cohortCoverage', () => {
 
     const rows = cohortCoverage(cohorts, sites)
 
-    expect(rows[0].excludedSites).toEqual([
+    expect(rows[0]!.excludedSites).toEqual([
       { siteId: 'S-9999', name: 'Henderson NV 6', reason: 'Insufficient telemetry coverage' },
     ])
   })
@@ -133,7 +133,7 @@ describe('cohortCoverage', () => {
 
     const rows = cohortCoverage(cohorts, sites)
 
-    expect(rows[0].excludedSites[0].reason).toBe('Excluded from peer analysis')
+    expect(rows[0]!.excludedSites[0]!.reason).toBe('Excluded from peer analysis')
   })
 
   it('returns an empty excludedSites array when a cohort excludes nobody', () => {
@@ -141,6 +141,6 @@ describe('cohortCoverage', () => {
 
     const rows = cohortCoverage(cohorts, [])
 
-    expect(rows[0].excludedSites).toEqual([])
+    expect(rows[0]!.excludedSites).toEqual([])
   })
 })
