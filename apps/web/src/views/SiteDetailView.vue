@@ -32,6 +32,8 @@ import InverterPanel from '@/components/InverterPanel.vue'
 import InverterThermalMap from '@/components/InverterThermalMap.vue'
 import VisionEvidence from '@/components/VisionEvidence.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
+import PerformanceModel from '@/components/PerformanceModel.vue'
+import SiteComparison from '@/components/SiteComparison.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -89,7 +91,12 @@ const cohort = computed(() => {
       </header>
 
       <!-- Excluded sites explain themselves before anything else on the page. -->
-      <NoticeCallout v-if="site.excluded_from_analysis" tone="warning" :icon="CircleSlash" class="excluded">
+      <NoticeCallout
+        v-if="site.excluded_from_analysis"
+        tone="warning"
+        :icon="CircleSlash"
+        class="excluded"
+      >
         <h2 class="excluded__title">Excluded from analysis</h2>
         <p class="excluded__detail">{{ site.excluded_from_analysis.detail }}</p>
         <dl class="excluded__facts">
@@ -116,6 +123,9 @@ const cohort = computed(() => {
         </p>
       </NoticeCallout>
 
+      <PerformanceModel :site="site" />
+      <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
+
       <!-- Block 1 — cohort chart, full width, above everything else. -->
       <section class="block">
         <CohortChart
@@ -126,8 +136,8 @@ const cohort = computed(() => {
           :economics="site.economics"
         />
         <p v-else class="empty">
-          No cohort series for this site. Healthy sites omit peer data by design —
-          docs/Schema.md section 8.7.
+          No cohort series for this site. Healthy sites omit peer data by design — docs/Schema.md
+          section 8.7.
         </p>
       </section>
 
@@ -138,17 +148,46 @@ const cohort = computed(() => {
         <p class="panel__detail">{{ site.hypothesis.detail }}</p>
 
         <dl class="facts">
-          <div><dt>Method</dt><dd>{{ site.detection.method }}</dd></div>
-          <div><dt>Score</dt><dd>{{ site.detection.score }} ({{ site.detection.score_type }})</dd></div>
-          <div><dt>Threshold</dt><dd>{{ site.detection.threshold }}</dd></div>
-          <div><dt>Confidence</dt><dd>{{ Math.round(site.detection.confidence * 100) }}%</dd></div>
-          <div><dt>Cohort</dt><dd>{{ cohort?.label }} · {{ site.detection.cohort_size }} sites</dd></div>
-          <div v-if="site.divergence"><dt>Diverging since</dt><dd>{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</dd></div>
-          <div><dt>At risk</dt><dd>{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</dd></div>
-          <div><dt>Calculation</dt><dd>{{ site.economics.calculation }}</dd></div>
+          <div>
+            <dt>Method</dt>
+            <dd>{{ site.detection.method }}</dd>
+          </div>
+          <div>
+            <dt>Score</dt>
+            <dd>{{ site.detection.score }} ({{ site.detection.score_type }})</dd>
+          </div>
+          <div>
+            <dt>Threshold</dt>
+            <dd>{{ site.detection.threshold }}</dd>
+          </div>
+          <div>
+            <dt>Confidence</dt>
+            <dd>{{ Math.round(site.detection.confidence * 100) }}%</dd>
+          </div>
+          <div>
+            <dt>Cohort</dt>
+            <dd>{{ cohort?.label }} · {{ site.detection.cohort_size }} sites</dd>
+          </div>
+          <div v-if="site.divergence">
+            <dt>Diverging since</dt>
+            <dd>{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</dd>
+          </div>
+          <div>
+            <dt>At risk</dt>
+            <dd>{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</dd>
+          </div>
+          <div>
+            <dt>Calculation</dt>
+            <dd>{{ site.economics.calculation }}</dd>
+          </div>
         </dl>
 
-        <NoticeCallout v-if="!site.detection.cohort_meets_minimum" tone="warning" compact class="caution">
+        <NoticeCallout
+          v-if="!site.detection.cohort_meets_minimum"
+          tone="warning"
+          compact
+          class="caution"
+        >
           This cohort is below the minimum size. Peer comparison is weaker here — treat the score
           with caution.
         </NoticeCallout>
@@ -176,21 +215,17 @@ const cohort = computed(() => {
         than rendering nothing. See VISION_API_URL in services/api.ts.
       -->
       <section v-if="site.detection && visionAvailable" class="block">
-        <VisionEvidence
-          :site-id="site.site_id"
-          :site-name="site.name"
-        />
+        <VisionEvidence :site-id="site.site_id" :site-name="site.name" />
       </section>
-
     </template>
   </main>
 </template>
 
 <style scoped>
 .screen {
-  max-width: 1100px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 4rem;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
 }
 
 .back {
@@ -220,7 +255,11 @@ const cohort = computed(() => {
 
 .head__name {
   margin: 0;
-  font-size: 1.4rem;
+  max-width: 26ch;
+  font-size: clamp(2rem, 3.5vw, 3.15rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 
 .head__meta {
@@ -364,7 +403,8 @@ const cohort = computed(() => {
   padding: 1.25rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
 }
 
 .panel__heading {

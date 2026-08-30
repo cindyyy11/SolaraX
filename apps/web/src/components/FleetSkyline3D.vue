@@ -206,7 +206,8 @@ function buildLayers(sites: SkylineSite[]) {
     id: 'labels',
     data: flagged,
     getPosition: (site) => [site.plotLon, site.plotLat],
-    getText: (site) => `RM ${Math.round(site.economics!.rm_at_risk_monthly).toLocaleString('en-MY')}`,
+    getText: (site) =>
+      `RM ${Math.round(site.economics!.rm_at_risk_monthly).toLocaleString('en-MY')}`,
     getSize: 13,
     getColor: prefersDark() ? [242, 244, 248, 230] : [11, 11, 11, 230],
     getPixelOffset: [0, -18],
@@ -250,6 +251,48 @@ function resetView(): void {
   lastViewState = { ...INITIAL_VIEW_STATE }
   deck?.finalize()
   createDeck(size)
+}
+
+function moveCamera(next: typeof INITIAL_VIEW_STATE): void {
+  const size = measuredSize()
+  if (!size) return
+  lastViewState = next
+  deck?.finalize()
+  createDeck(size)
+}
+
+function showFleet(): void {
+  moveCamera({ ...INITIAL_VIEW_STATE })
+}
+
+function showRisk(): void {
+  moveCamera({ ...INITIAL_VIEW_STATE, zoom: 3.65, pitch: 64, bearing: -24 })
+}
+
+function focusSites(sites: Site[], zoom: number, pitch: number): void {
+  if (!sites.length) return
+  const longitude = sites.reduce((sum, site) => sum + site.lon, 0) / sites.length
+  const latitude = sites.reduce((sum, site) => sum + site.lat, 0) / sites.length
+  moveCamera({ ...INITIAL_VIEW_STATE, longitude, latitude, zoom, pitch, bearing: -12 })
+}
+
+function showCohort(): void {
+  const subject = props.sites.find((site) => site.site_id === props.activeSiteId)
+  const cohortId = subject?.cohort_id ?? props.sites[0]?.cohort_id
+  focusSites(
+    props.sites.filter((site) => site.cohort_id === cohortId),
+    5.4,
+    48,
+  )
+}
+
+function showSelected(): void {
+  const selected =
+    props.sites.find((site) => site.site_id === props.activeSiteId) ??
+    [...props.sites].sort(
+      (a, b) => (b.economics?.rm_at_risk_monthly ?? 0) - (a.economics?.rm_at_risk_monthly ?? 0),
+    )[0]
+  if (selected) focusSites([selected], 7.1, 56)
 }
 
 interface TooltipInfo {
@@ -386,12 +429,18 @@ watch(() => props.sites, render, { deep: false })
         <template v-if="tooltip.site.fanned"> · fanned, shares a coordinate</template>
       </p>
       <p v-if="tooltip.site.economics" class="skyline__tooltip-rm">
-        RM {{ Math.round(tooltip.site.economics.rm_at_risk_monthly).toLocaleString('en-MY') }}/mo
-        at risk
+        RM {{ Math.round(tooltip.site.economics.rm_at_risk_monthly).toLocaleString('en-MY') }}/mo at
+        risk
       </p>
     </div>
 
-    <button type="button" class="skyline__reset" @click="resetView">Reset view</button>
+    <div class="skyline__presets" role="group" aria-label="3D camera presets">
+      <button type="button" @click="showFleet">Fleet</button>
+      <button type="button" @click="showRisk">Risk</button>
+      <button type="button" @click="showCohort">Cohort</button>
+      <button type="button" @click="showSelected">Selected</button>
+      <button type="button" @click="resetView">Reset</button>
+    </div>
 
     <p class="skyline__caption">
       Column height is real RM at risk this month — not a rendering of any roof or panel, which
@@ -459,30 +508,51 @@ watch(() => props.sites, render, { deep: false })
   color: var(--action-text);
 }
 
-.skyline__reset {
+.skyline__presets {
   position: absolute;
   top: 0.6rem;
   right: 0.6rem;
   z-index: 5;
-  padding: 0.35rem 0.7rem;
+  display: flex;
+  overflow: hidden;
   background: var(--surface-1);
-  color: var(--text-secondary);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-sm);
-  font: inherit;
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 600;
-  cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
 }
 
-.skyline__reset:hover {
+.skyline__presets button {
+  min-height: 2.25rem;
+  padding: 0 0.55rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 0;
+  font: 600 0.68rem var(--font-display);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.skyline__presets button + button {
+  border-left: 1px solid var(--border-hairline);
+}
+
+.skyline__presets button:hover {
   color: var(--action-text);
-  border-color: var(--action-text);
+  background: var(--surface-2);
+}
+
+@media (max-width: 640px) {
+  .skyline__presets {
+    left: 0.6rem;
+    right: auto;
+  }
+
+  .skyline__presets button {
+    padding: 0 0.45rem;
+    font-size: 0.62rem;
+  }
 }
 
 .skyline__caption {

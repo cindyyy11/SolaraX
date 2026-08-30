@@ -17,6 +17,9 @@
 
   /* Surfaces */
   --surface-1: #fcfcfb;
+  --surface-2: #f2f3ef;
+  --surface-emphasis: #f5eee7;
+  --surface-selected: #fff7e8;
   --page-plane: #f9f9f7;
 
   /* Ink */
@@ -33,6 +36,18 @@
   --gridline: #e1e0d9;
   --baseline: #c3c2b7;
   --border-hairline: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.22);
+
+  /* Mission-control shell */
+  --nav-surface: #101b18;
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --nav-text: #9aaca4;
+  --nav-text-strong: #f2f7f4;
+  --nav-hover: rgba(255, 255, 255, 0.055);
+  --nav-active: rgba(227, 162, 70, 0.14);
+  --nav-active-border: rgba(227, 162, 70, 0.3);
+  --nav-active-text: #f3ba67;
+  --signal-live: #68d99b;
 
   /* Status — reserved, never themed, never a series color */
   --status-good: #0ca30c;
@@ -110,12 +125,16 @@
      animates in this product uses this pair rather than inventing its own
      timing. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --duration-fast: 140ms;
   --duration-base: 220ms;
 
   --radius-sm: 4px;
   --radius-md: 8px;
+  --radius-lg: 14px;
   --radius-full: 999px;
+
+  --elevation-1: 0 10px 30px rgba(25, 44, 76, 0.055);
 
   /* Type — see fonts.css for why these two faces and why they are self-hosted.
      The fallback stacks are chosen to be metrically close so the one reflow
@@ -129,6 +148,9 @@
     color-scheme: dark;
 
     --surface-1: #1a1a19;
+    --surface-2: #222522;
+    --surface-emphasis: #211a17;
+    --surface-selected: #2a241a;
     --page-plane: #0d0d0d;
 
     --text-primary: #ffffff;
@@ -138,6 +160,8 @@
     --gridline: #2c2c2a;
     --baseline: #383835;
     --border-hairline: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --elevation-1: 0 12px 34px rgba(0, 0, 0, 0.22);
 
     --series-1: #3987e5;
     --series-2: #d95926;
@@ -169,6 +193,9 @@
   color-scheme: dark;
 
   --surface-1: #1a1a19;
+  --surface-2: #222522;
+  --surface-emphasis: #211a17;
+  --surface-selected: #2a241a;
   --page-plane: #0d0d0d;
 
   --text-primary: #ffffff;
@@ -178,6 +205,8 @@
   --gridline: #2c2c2a;
   --baseline: #383835;
   --border-hairline: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --elevation-1: 0 12px 34px rgba(0, 0, 0, 0.22);
 
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -206,6 +235,7 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   min-height: 100vh;
+  overflow-x: clip;
   /* This product is almost entirely numbers in columns. Tabular figures stop
      a ringgit total from shifting width as its digits change. */
   font-variant-numeric: tabular-nums;
@@ -225,6 +255,12 @@ h3 {
 
 * {
   box-sizing: border-box;
+}
+
+[data-demo-focus] {
+  outline: 3px solid var(--action-text);
+  outline-offset: 5px;
+  border-radius: var(--radius-lg);
 }
 
 /* --- Browser surfaces we did not draw, themed anyway ------------------- */

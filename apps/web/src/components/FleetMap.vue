@@ -46,7 +46,12 @@ const FleetSkyline3D = defineAsyncComponent({
   // that silently drops this component, so the "loading" state was actually
   // blank the whole time.
   loadingComponent: {
-    render: () => h('p', { class: 'map-3d-loading' }, 'Loading 3D view…'),
+    render: () =>
+      h('div', { class: 'map-3d-loading' }, [
+        h('span', { class: 'map-3d-loading__pulse' }),
+        h('strong', 'Building the risk landscape'),
+        h('small', 'Loading measured coordinates and monthly ringgit exposure…'),
+      ]),
   },
 })
 
@@ -54,6 +59,8 @@ const props = defineProps<{
   sites: Site[]
   /** Site currently highlighted from the list, if any. */
   activeSiteId?: string | null
+  /** Shareable parent-controlled starting mode. */
+  initialView?: MapViewMode
 }>()
 
 const emit = defineEmits<{
@@ -88,6 +95,9 @@ class BasemapFallbackLayer extends L.GridLayer {
  * "Map data not yet available" tiles in this fleet view. Map therefore uses
  * keyless OSM Standard; Esri remains only where it is needed for Aerial.
  */
+// Leaflet must establish a valid map and zoom range before a shared URL can
+// hand the surface to 3D. Starting the hidden Leaflet instance directly in
+// `3d` leaves it without a basemap maxZoom and markercluster then throws.
 const view = ref<MapViewMode>('map')
 
 /**
@@ -255,6 +265,9 @@ onMounted(() => {
 
   renderMarkers()
 
+  if (props.initialView && props.initialView !== 'map') {
+    setView(props.initialView)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -269,13 +282,20 @@ onBeforeUnmount(() => {
 watch(() => props.sites, renderMarkers, { deep: false })
 
 watch(
+  () => props.initialView,
+  (next) => {
+    if (next) setView(next)
+  },
+)
+
+watch(
   () => props.activeSiteId,
   (siteId) => {
     for (const [id, marker] of markersBySiteId) {
       const site = props.sites.find((item) => item.site_id === id)
       if (site) marker.setIcon(buildIcon(site, id === siteId))
     }
-    if (!siteId || !clusterGroup) return
+    if (!siteId || !clusterGroup || view.value === '3d') return
     const marker = markersBySiteId.get(siteId)
     if (marker) {
       // Fans the cluster open if the target is hidden inside one.
@@ -335,15 +355,27 @@ watch(
     </div>
     <p v-if="view !== '3d'" class="map-legend">
       <span class="map-legend__item">
-        <TriangleAlert class="map-legend__glyph map-legend__glyph--dispatch" :size="13" aria-hidden="true" />
+        <TriangleAlert
+          class="map-legend__glyph map-legend__glyph--dispatch"
+          :size="13"
+          aria-hidden="true"
+        />
         dispatch
       </span>
       <span class="map-legend__item">
-        <Diamond class="map-legend__glyph map-legend__glyph--monitor" :size="13" aria-hidden="true" />
+        <Diamond
+          class="map-legend__glyph map-legend__glyph--monitor"
+          :size="13"
+          aria-hidden="true"
+        />
         monitor
       </span>
       <span class="map-legend__item">
-        <CircleCheck class="map-legend__glyph map-legend__glyph--healthy" :size="13" aria-hidden="true" />
+        <CircleCheck
+          class="map-legend__glyph map-legend__glyph--healthy"
+          :size="13"
+          aria-hidden="true"
+        />
         healthy
       </span>
       <span class="map-legend__hint">
@@ -382,7 +414,7 @@ watch(
 }
 
 .map-canvas {
-  height: 320px;
+  height: 520px;
   width: 100%;
 }
 
@@ -405,7 +437,7 @@ watch(
 
 @media (max-width: 900px) {
   .map-canvas {
-    height: 260px;
+    height: 360px;
   }
 }
 
@@ -505,17 +537,55 @@ watch(
 }
 
 .map-3d-loading {
-  display: grid;
-  place-items: center;
+  display: flex;
   height: 480px;
   margin: 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  color: var(--nav-text);
+  background: var(--nav-surface);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.map-3d-loading strong {
+  color: var(--nav-text-strong);
+  font: 650 1rem var(--font-display);
+}
+
+.map-3d-loading small {
+  max-width: 32ch;
+  line-height: 1.5;
+}
+
+.map-3d-loading__pulse {
+  width: 2.6rem;
+  height: 2.6rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--nav-active-border);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.55rem var(--nav-active);
+  animation: map-load 1.4s var(--ease-out) infinite alternate;
+}
+
+@keyframes map-load {
+  to {
+    opacity: 0.55;
+    transform: scale(0.88);
+  }
 }
 
 @media (max-width: 900px) {
   .map-3d-loading {
     height: 360px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-3d-loading__pulse {
+    animation: none;
   }
 }
 </style>
@@ -547,9 +617,7 @@ watch(
 .fleet-marker svg {
   /* A surface-colored ring keeps overlapping marks legible, same intent as
      the old text-shadow trick, expressed for a stroked SVG instead of text. */
-  filter:
-    drop-shadow(0 0 2px var(--surface-1, #fff))
-    drop-shadow(0 0 2px var(--surface-1, #fff));
+  filter: drop-shadow(0 0 2px var(--surface-1, #fff)) drop-shadow(0 0 2px var(--surface-1, #fff));
 }
 
 /*
@@ -560,10 +628,8 @@ watch(
  * backdrop than a flat canvas.
  */
 .map-shell[data-view='aerial'] .fleet-marker svg {
-  filter:
-    drop-shadow(0 0 2px rgba(255, 255, 255, 0.95))
-    drop-shadow(0 0 3px rgba(255, 255, 255, 0.85))
-    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.85)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .fleet-marker--active {

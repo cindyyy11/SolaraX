@@ -95,7 +95,11 @@ const statusSplit = computed(() => {
     { key: 'dispatch', label: 'Dispatch', count: assessedWith('dispatch') },
     { key: 'monitor', label: 'Monitor', count: assessedWith('monitor') },
     { key: 'healthy', label: 'Healthy', count: assessedWith('healthy') },
-    { key: 'not_assessed', label: 'Not assessed', count: sites.filter((s) => !isAssessed(s)).length },
+    {
+      key: 'not_assessed',
+      label: 'Not assessed',
+      count: sites.filter((s) => !isAssessed(s)).length,
+    },
   ]
     .filter((part) => part.key !== 'not_assessed' || part.count > 0)
     .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
@@ -127,7 +131,8 @@ const caseComparison = computed(() => {
   if (!base || !sum) return null
 
   const midSaving = sum.trips_avoided * base.cost_per_visit_rm
-  const lowSaving = sum.trips_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
+  const lowSaving =
+    sum.trips_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
   const kwhAtRisk = sum.total_rm_at_risk / base.tariff_rm_per_kwh
   const midRisk = kwhAtRisk * base.tariff_rm_per_kwh
   const lowRisk = kwhAtRisk * (base.tariff_rm_per_kwh_range?.low ?? base.tariff_rm_per_kwh)
@@ -157,10 +162,8 @@ const assumptionRows = computed(() => {
       key,
       value: value as number | string,
       note: notes[key] ?? '',
-      range:
-        (base as Record<string, unknown>)[`${key}_range`] as
-          | { low: number; high: number }
-          | undefined,
+      range: (base as Record<string, unknown>)[`${key}_range`] as
+        { low: number; high: number } | undefined,
     }))
 })
 </script>
@@ -263,7 +266,11 @@ const assumptionRows = computed(() => {
         </div>
         <ul class="split__legend">
           <li v-for="part in statusSplit" :key="part.key">
-            <span class="split__swatch" :class="`split__swatch--${part.key}`" aria-hidden="true"></span>
+            <span
+              class="split__swatch"
+              :class="`split__swatch--${part.key}`"
+              aria-hidden="true"
+            ></span>
             {{ part.label }} — {{ part.count }} sites
           </li>
         </ul>
@@ -298,7 +305,7 @@ const assumptionRows = computed(() => {
               <span
                 class="bars__fill"
                 :class="`bars__fill--${item.status}`"
-                :style="{ width: (item.rm / maxRiskRm) * 100 + '%' }"
+                :style="{ '--bar-scale': item.rm / maxRiskRm }"
               ></span>
             </span>
             <span class="bars__value">{{ formatRinggit(item.rm) }}</span>
@@ -338,10 +345,7 @@ const assumptionRows = computed(() => {
             <span class="compare__value">{{ formatRinggit(row.low) }}</span>
           </div>
         </div>
-        <NoticeCallout
-          class="verdict"
-          :tone="caseComparison.holdsAtWorst ? 'good' : 'warning'"
-        >
+        <NoticeCallout class="verdict" :tone="caseComparison.holdsAtWorst ? 'good' : 'warning'">
           <template v-if="caseComparison.holdsAtWorst">
             At the unfavourable end of every range, avoided-trip saving still exceeds exposure.
             <strong>The recommendation holds.</strong>
@@ -378,7 +382,9 @@ const assumptionRows = computed(() => {
           </thead>
           <tbody>
             <tr v-for="row in assumptionRows" :key="row.key">
-              <td><code>{{ row.key }}</code></td>
+              <td>
+                <code>{{ row.key }}</code>
+              </td>
               <td class="table__num">{{ row.value }}</td>
               <td class="table__num">
                 <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
@@ -403,9 +409,9 @@ const assumptionRows = computed(() => {
 
 <style scoped>
 .screen {
-  max-width: 1100px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
 }
 
 .head {
@@ -420,9 +426,10 @@ const assumptionRows = computed(() => {
 
 .head__title {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: clamp(2rem, 4vw, 3.7rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
 .head__month {
@@ -451,7 +458,8 @@ const assumptionRows = computed(() => {
   padding: 0.85rem 1rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
 }
 
 .case__switch {
@@ -618,7 +626,6 @@ const assumptionRows = computed(() => {
   display: grid;
   place-items: center;
   min-width: 3px;
-  transition: width 200ms ease;
 }
 
 .split__part--dispatch {
@@ -708,9 +715,12 @@ const assumptionRows = computed(() => {
 
 .bars__fill {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: 2px;
-  transition: width 200ms ease;
+  transform: scaleX(var(--bar-scale, 0));
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-in-out);
 }
 
 .bars__fill--dispatch {

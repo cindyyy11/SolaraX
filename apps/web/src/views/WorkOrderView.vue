@@ -20,7 +20,16 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Zap, Thermometer, Printer } from '@lucide/vue'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Zap,
+  Thermometer,
+  Printer,
+  Clock3,
+  ListChecks,
+  Save,
+} from '@lucide/vue'
 import { loadDispatch, findSite, findCohort, formatRinggit, formatCapacity } from '@/services/api'
 import type { Dispatch, Site } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
@@ -57,10 +66,25 @@ const selectionRationale = computed(() => {
 // --- Verification method, derived from the hypothesis ------------------------
 
 const ELECTRICAL_TERMS = [
-  'inverter', 'string', 'breaker', 'combiner', 'fuse', 'wiring', 'connector', 'isolator',
+  'inverter',
+  'string',
+  'breaker',
+  'combiner',
+  'fuse',
+  'wiring',
+  'connector',
+  'isolator',
 ]
 const MODULE_TERMS = [
-  'soiling', 'hotspot', 'hot spot', 'crack', 'debris', 'shading', 'glass', 'module', 'panel',
+  'soiling',
+  'hotspot',
+  'hot spot',
+  'crack',
+  'debris',
+  'shading',
+  'glass',
+  'module',
+  'panel',
 ]
 
 function countMatches(haystack: string, terms: string[]): number {
@@ -183,9 +207,7 @@ const rankedFlagged = computed(() => {
     .sort((a, b) => b.rm - a.rm)
 })
 
-const maxFlaggedRm = computed(() =>
-  Math.max(1, ...rankedFlagged.value.map((item) => item.rm)),
-)
+const maxFlaggedRm = computed(() => Math.max(1, ...rankedFlagged.value.map((item) => item.rm)))
 
 /** 90-day performance trace for the header sparkline. */
 const sparkPath = computed(() => {
@@ -306,11 +328,18 @@ function printCard(): void {
         </section>
 
         <section class="facts">
-          <div><span class="facts__key">Capacity</span><span>{{ formatCapacity(site.capacity_kwp) }}</span></div>
-          <div><span class="facts__key">Cohort</span><span>{{ cohort?.label ?? 'Ungrouped' }}</span></div>
+          <div>
+            <span class="facts__key">Capacity</span
+            ><span>{{ formatCapacity(site.capacity_kwp) }}</span>
+          </div>
+          <div>
+            <span class="facts__key">Cohort</span><span>{{ cohort?.label ?? 'Ungrouped' }}</span>
+          </div>
           <div v-if="site.economics">
             <span class="facts__key">At risk</span>
-            <span class="facts__strong">{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</span>
+            <span class="facts__strong"
+              >{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</span
+            >
           </div>
           <div v-if="site.divergence">
             <span class="facts__key">Diverging since</span>
@@ -323,8 +352,8 @@ function printCard(): void {
           <p class="section__lead">{{ site.hypothesis.summary }}</p>
           <p class="section__body">{{ site.hypothesis.detail }}</p>
           <p class="section__meta">
-            Confidence {{ Math.round(site.hypothesis.confidence * 100) }}% ·
-            method: {{ site.detection?.method }}
+            Confidence {{ Math.round(site.hypothesis.confidence * 100) }}% · method:
+            {{ site.detection?.method }}
           </p>
         </section>
 
@@ -334,11 +363,15 @@ function printCard(): void {
 
           <!-- The decision drawn, so the branch not taken is visible too. -->
           <div class="route">
-            <div class="route__node route__node--start">Hypothesis<br /><strong>{{ verification.kind }}</strong></div>
+            <div class="route__node route__node--start">
+              Hypothesis<br /><strong>{{ verification.kind }}</strong>
+            </div>
             <ArrowRight class="route__arrow" :size="18" aria-hidden="true" />
             <div
               class="route__node"
-              :class="verification.kind === 'electrical' ? 'route__node--active' : 'route__node--dim'"
+              :class="
+                verification.kind === 'electrical' ? 'route__node--active' : 'route__node--dim'
+              "
             >
               <Zap class="route__icon" :size="18" aria-hidden="true" />
               Combiner box<br />&amp; inverter display
@@ -364,13 +397,15 @@ function printCard(): void {
         <section v-if="site.hypothesis?.checks?.length" class="section">
           <h2 class="section__title">
             What to check on site
-            <span class="section__progress">{{ checklistProgress.done }} / {{ checklistProgress.total }} done</span>
+            <span class="section__progress"
+              >{{ checklistProgress.done }} / {{ checklistProgress.total }} done</span
+            >
           </h2>
           <ul class="checklist">
             <li v-for="check in site.hypothesis.checks" :key="check">
               <label class="checklist__item">
                 <input v-model="ticked[check]" type="checkbox" />
-                <span :class="{ 'checklist__done': ticked[check] }">{{ check }}</span>
+                <span :class="{ checklist__done: ticked[check] }">{{ check }}</span>
               </label>
             </li>
           </ul>
@@ -382,7 +417,7 @@ function printCard(): void {
             <li v-for="item in site.hypothesis.photograph" :key="item">
               <label class="checklist__item">
                 <input v-model="ticked[item]" type="checkbox" />
-                <span :class="{ 'checklist__done': ticked[item] }">{{ item }}</span>
+                <span :class="{ checklist__done: ticked[item] }">{{ item }}</span>
               </label>
             </li>
           </ul>
@@ -432,15 +467,28 @@ function printCard(): void {
           <div class="field">
             <span class="field__label">Outcome</span>
             <div class="radios">
-              <label><input v-model="findingsOutcome" type="radio" value="fault_confirmed" /> Fault confirmed</label>
-              <label><input v-model="findingsOutcome" type="radio" value="nothing_found" /> Nothing found</label>
-              <label><input v-model="findingsOutcome" type="radio" value="different_cause" /> Different cause</label>
+              <label
+                ><input v-model="findingsOutcome" type="radio" value="fault_confirmed" /> Fault
+                confirmed</label
+              >
+              <label
+                ><input v-model="findingsOutcome" type="radio" value="nothing_found" /> Nothing
+                found</label
+              >
+              <label
+                ><input v-model="findingsOutcome" type="radio" value="different_cause" /> Different
+                cause</label
+              >
             </div>
           </div>
 
           <label class="field">
             <span class="field__label">What was actually found</span>
-            <textarea v-model="findingsNote" rows="4" placeholder="Describe what the technician found."></textarea>
+            <textarea
+              v-model="findingsNote"
+              rows="4"
+              placeholder="Describe what the technician found."
+            ></textarea>
           </label>
 
           <label class="field">
@@ -450,7 +498,9 @@ function printCard(): void {
 
           <div class="field no-print">
             <button type="button" class="save-button" @click="saveFindings">Save findings</button>
-            <span v-if="savedAt" class="field__saved">Saved {{ new Date(savedAt).toLocaleString() }}</span>
+            <span v-if="savedAt" class="field__saved"
+              >Saved {{ new Date(savedAt).toLocaleString() }}</span
+            >
           </div>
 
           <p class="field__note no-print">
@@ -459,10 +509,45 @@ function printCard(): void {
           </p>
         </section>
 
+        <section class="activity" aria-labelledby="activity-title">
+          <h2 id="activity-title" class="section__title">Work-order activity</h2>
+          <ol class="activity__timeline">
+            <li class="activity__event activity__event--done">
+              <Clock3 :size="17" aria-hidden="true" />
+              <div>
+                <strong>Work order generated</strong
+                ><span>From pipeline {{ dispatch?.meta.pipeline_version }}</span>
+              </div>
+            </li>
+            <li
+              class="activity__event"
+              :class="{ 'activity__event--done': checklistProgress.done > 0 }"
+            >
+              <ListChecks :size="17" aria-hidden="true" />
+              <div>
+                <strong>Technician checklist</strong
+                ><span
+                  >{{ checklistProgress.done }} of {{ checklistProgress.total }} checks
+                  complete</span
+                >
+              </div>
+            </li>
+            <li class="activity__event" :class="{ 'activity__event--done': savedAt }">
+              <Save :size="17" aria-hidden="true" />
+              <div>
+                <strong>Findings recorded</strong
+                ><span>{{
+                  savedAt ? `Saved ${new Date(savedAt).toLocaleString()}` : 'Awaiting site findings'
+                }}</span>
+              </div>
+            </li>
+          </ol>
+        </section>
+
         <footer class="card__foot">
           <p>
-            {{ dispatch?.meta.data_source }} · generated {{ dispatch?.meta.generated_at }} ·
-            schema {{ dispatch?.meta.schema_version }}
+            {{ dispatch?.meta.data_source }} · generated {{ dispatch?.meta.generated_at }} · schema
+            {{ dispatch?.meta.schema_version }}
           </p>
           <p v-if="dispatch?.meta.date_remapped">{{ dispatch?.meta.date_remap_note }}</p>
         </footer>
@@ -473,9 +558,9 @@ function printCard(): void {
 
 <style scoped>
 .screen {
-  max-width: 880px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 4rem;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
 }
 
 .crumbs {
@@ -540,7 +625,62 @@ function printCard(): void {
   padding: 1.75rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+}
+
+.activity {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-hairline);
+}
+.activity__timeline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--border-hairline);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--radius-md);
+  list-style: none;
+}
+.activity__event {
+  display: flex;
+  min-height: 5.5rem;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+.activity__event svg {
+  flex: none;
+}
+.activity__event div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.activity__event strong {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+.activity__event span {
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.activity__event--done {
+  color: var(--success-text);
+  background: var(--callout-good-bg);
+}
+.activity__event--done strong {
+  color: var(--text-primary);
+}
+@media (max-width: 700px) {
+  .activity__timeline {
+    grid-template-columns: 1fr;
+  }
 }
 
 .card__head {
