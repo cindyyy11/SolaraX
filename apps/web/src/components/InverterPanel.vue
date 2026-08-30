@@ -175,10 +175,22 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
             <template v-if="evidence && evidence.has_imagery && evidence.image_url">
               <img :src="evidence.image_url" :alt="`Thermal image for ${unit.unit_id}`" class="detail__image" />
               <p class="detail__caption">
-                {{ evidence.defect_class }} ·
-                {{ evidence.confidence ? Math.round(evidence.confidence * 100) + '%' : '' }} ·
-                captured {{ evidence.captured_date }}
+                {{ evidence.defect_class }}
+                <template v-if="evidence.confidence">
+                  · {{ Math.round(evidence.confidence * 100) }}%
+                </template>
+                <!-- A public dataset crop carries no capture date. Printing
+                     "captured undefined" is worse than printing nothing. -->
+                <template v-if="evidence.captured_date">
+                  · captured {{ evidence.captured_date }}
+                </template>
                 <DataStatusBadge v-if="evidence.data_status" :status="evidence.data_status" small />
+              </p>
+              <!-- Without this, a thermal image beside a real site name reads as
+                   a photograph of that site's roof. It is a public dataset crop.
+                   The badge says SIMULATED; only this says why. -->
+              <p v-if="evidence.model_note" class="detail__provenance">
+                {{ evidence.model_note }}
               </p>
             </template>
             <p v-else class="detail__empty">
@@ -468,6 +480,14 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
   margin: 0.4rem 0 0;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.detail__provenance {
+  margin: 0.35rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 .detail__empty {
