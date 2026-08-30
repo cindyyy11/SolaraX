@@ -214,4 +214,22 @@ import SiteSearch from '@/components/SiteSearch.vue'
     font-size: 0.72rem;
   }
 }
+
+/* Printing a screen means printing its content, not this dashboard's chrome.
+   Nothing downstream had to opt into this — Work Order's .no-print rules
+   handle its own in-page controls, but the app rail and mobile header live
+   here, once, above every route. */
+@media print {
+  .skip-link,
+  .app-rail,
+  .mobile-header {
+    display: none !important;
+  }
+  .app-shell {
+    padding-left: 0;
+  }
+  .app-shell__content {
+    margin-top: 0;
+  }
+}
 </style>
