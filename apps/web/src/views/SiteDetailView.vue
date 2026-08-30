@@ -34,6 +34,7 @@ import VisionEvidence from '@/components/VisionEvidence.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
 import PerformanceModel from '@/components/PerformanceModel.vue'
 import SiteComparison from '@/components/SiteComparison.vue'
+import SiteDigitalTwin from '@/components/SiteDigitalTwin.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -124,6 +125,7 @@ const cohort = computed(() => {
       </NoticeCallout>
 
       <PerformanceModel :site="site" />
+      <SiteDigitalTwin :site="site" />
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->
