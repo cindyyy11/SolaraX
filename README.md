@@ -1,6 +1,7 @@
 <div align="center">
 
-# SolaraX
+<img src="apps/web/public/brand/logo-lockup.png#gh-light-mode-only" alt="SolaraX" width="400">
+<img src="apps/web/public/brand/logo-lockup-dark.png#gh-dark-mode-only" alt="SolaraX" width="400">
 
 **Which sites in your solar fleet need a maintenance visit this month — and which don't.**
 
