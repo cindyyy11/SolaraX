@@ -1,0 +1,13 @@
+# Dependencies for the self-contained Gradio-SDK Vision API Space.
+#
+# CPU-only torch: YOLOv8n-cls inference is milliseconds on CPU, and the CPU
+# wheels are a far smaller download than the default CUDA build. This Space does
+# not use a GPU even on ZeroGPU hardware (no @spaces.GPU functions).
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+
+ultralytics>=8.3
+gradio>=4.44             # brings fastapi + uvicorn transitively
+python-multipart>=0.0.9  # required for UploadFile / File(...) form parsing

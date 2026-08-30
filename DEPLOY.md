@@ -60,22 +60,35 @@ of being served stale from the edge for the length of the judging window.
 
 ---
 
-## The vision service — leave `VITE_VISION_API_URL` unset
+## The vision service — deployed on Hugging Face Spaces
 
-The M5 upload panel on Screen 2 posts an image to a FastAPI service. That service is **not deployed**,
-and until it is, the correct configuration is no configuration:
+The M5 upload panel on Screen 2 posts an image to a FastAPI service. That service **is now deployed**:
 
-- Unset, the panel is **hidden** in production builds and the rest of Screen 2 renders normally.
-- Set to a `http://127.0.0.1:8000`-style address, the panel renders on the public site, accepts a
-  file, and then fails for every visitor — a deployed page is served over HTTPS, and browsers block
-  plaintext requests to localhost from an HTTPS origin as mixed content.
+- **URL:** `https://wenhuiiiiiii-solarax-vision.hf.space`  (`/health`, `POST /vision/predict`)
+- **Space:** `wenhuiiiiiii/solarax-vision` — Gradio SDK, ZeroGPU (free) hardware
+- **Source:** `deploy/vision-space/gradio/` (self-contained `app.py` — the classifier is inlined
+  because a Gradio-SDK Space can't `git clone` this repo or import `pipeline.`). Keep it in sync
+  with `pipeline/vision_api.py` + `pipeline/defect_classifier.py` by hand.
 
-Local development is unaffected: `npm run dev` still defaults to `http://127.0.0.1:8000`, so B can
-work on M5 exactly as before.
+To switch the panel **on** for the deployed dashboard:
 
-If the service is later deployed (Hugging Face Spaces is the choice in `CLAUDE.md`), set
-`VITE_VISION_API_URL` to its **HTTPS** URL in Vercel and add the Vercel domain to the CORS allow-list
-in `pipeline/vision_api.py`, which currently permits `http://localhost:5173` only.
+1. Vercel → SolaraX project → Settings → Environment Variables →
+   `VITE_VISION_API_URL` = `https://wenhuiiiiiii-solarax-vision.hf.space` (Production, no trailing slash)
+2. Redeploy (Vite inlines env vars at build time — a restart is not enough)
+
+CORS: `app.py` allows `solara-x-inky.vercel.app` and `*.vercel.app` previews by default; override
+with the `VISION_ALLOWED_ORIGINS` Space variable if the domain changes.
+
+**Behaviour without the env var:** the panel stays hidden in production builds and the rest of
+Screen 2 renders normally. `npm run dev` still defaults to `http://127.0.0.1:8000` for local M5 work.
+Do **not** point it at a `http://127.0.0.1:8000`-style address in a deployed build — an HTTPS page
+cannot call a plaintext localhost endpoint (mixed content), and it fails for every visitor.
+
+**Cold start:** a free Space sleeps after 48h idle and takes ~40s to wake. Hit `/health` a few
+minutes before any demo or judging window. ZeroGPU also has a daily free-usage quota.
+
+The Docker-SDK variant in `deploy/vision-space/` (Dockerfile that builds from this repo) is kept as
+a fallback — it needs an HF account with a payment method on file, which the Gradio route avoids.
 
 ---
 
