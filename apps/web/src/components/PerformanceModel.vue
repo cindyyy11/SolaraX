@@ -24,7 +24,7 @@ function formatEnergy(value: number | null): string {
 </script>
 
 <template>
-  <section class="model" aria-labelledby="performance-model-title">
+  <section class="model card--dark card--interactive" aria-labelledby="performance-model-title">
     <header class="model__head">
       <div>
         <h2 id="performance-model-title">How the recommendation is formed</h2>
@@ -89,12 +89,8 @@ function formatEnergy(value: number | null): string {
 
 <style scoped>
 .model {
-  margin: 1.5rem 0;
   padding: 1.1rem;
-  background: var(--nav-surface);
   color: var(--nav-text-strong);
-  border: 1px solid var(--nav-border);
-  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .model__head {

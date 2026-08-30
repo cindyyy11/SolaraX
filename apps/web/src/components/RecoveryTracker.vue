@@ -20,7 +20,7 @@ const isEligible = computed(() => props.site.status === 'dispatch' && Boolean(pr
 </script>
 
 <template>
-  <section class="recovery" aria-labelledby="recovery-title">
+  <section class="recovery card--dark card--interactive" aria-labelledby="recovery-title">
     <header class="recovery__header">
       <div>
         <h2 id="recovery-title">Recovery tracker</h2>
@@ -53,7 +53,7 @@ const isEligible = computed(() => props.site.status === 'dispatch' && Boolean(pr
 </template>
 
 <style scoped>
-.recovery { margin:1.75rem 0; overflow:hidden; color:#eff5f2; background:#13211d; border-radius:var(--radius-lg); box-shadow:0 18px 42px rgba(9,22,18,.16); }
+.recovery { overflow:hidden; color:#eff5f2; }
 .recovery__header { display:flex; align-items:flex-start; justify-content:space-between; gap:1.25rem; padding:1.1rem 1.25rem; border-bottom:1px solid rgba(255,255,255,.09); }
 .recovery__header h2 { margin:0; font-family:var(--font-display); font-size:clamp(1.2rem,2vw,1.55rem); letter-spacing:-.03em; }
 .recovery__header p { margin:.35rem 0 0; color:#9fb0aa; font-size:.78rem; }
