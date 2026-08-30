@@ -110,7 +110,19 @@ function buildOption(): echarts.EChartsCoreOption {
         formatter: `diverging since ${start}`,
         color: t.textSecondary,
         fontSize: 11,
-        position: 'insideEndTop',
+        // ECharts rotates a markLine label to follow its line by default, so
+        // on a VERTICAL x-axis marker the text ran bottom-to-top straight
+        // through the plot area — the one annotation that explains the whole
+        // chart, set sideways. Pinned horizontal and lifted clear of the top
+        // of the line, with a plate behind it so it stays readable where it
+        // crosses the peer lines.
+        rotate: 0,
+        position: 'start',
+        distance: 6,
+        align: 'left',
+        backgroundColor: t.surface,
+        padding: [3, 5],
+        borderRadius: 3,
       },
       lineStyle: { color: t.critical, type: 'dashed', width: 1.5 },
       data: [{ xAxis: start }],

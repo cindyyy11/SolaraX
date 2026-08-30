@@ -13,10 +13,12 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { TriangleAlert, Diamond, CircleCheck, CircleSlash, Clock } from '@lucide/vue'
 import { loadDispatch, sitesByStatus, formatRinggit, formatCapacity } from '@/services/api'
 import type { Dispatch, Site, SiteStatus } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import FleetMap from '@/components/FleetMap.vue'
+import NoticeCallout from '@/components/NoticeCallout.vue'
 
 const router = useRouter()
 
@@ -71,11 +73,17 @@ function cohortBelowMinimum(site: Site): boolean {
   return cohort ? !cohort.meets_minimum : false
 }
 
-/** Glyph pairs with the text label so status never rests on color alone. */
-const STATUS_GLYPH: Record<SiteStatus, string> = {
-  dispatch: '▲',
-  monitor: '◆',
-  healthy: '●',
+/**
+ * One icon vocabulary, reused sitewide (DispatchView, FleetMap, InverterPanel):
+ * triangle = needs action, diamond = watch it, circle-check = fine. Three
+ * distinct silhouettes so the pairing works for a colorblind reader before
+ * the color does any work at all — icon and text label both ship with every
+ * use, per the same rule the row markup already followed with glyphs.
+ */
+const STATUS_ICON: Record<SiteStatus, typeof TriangleAlert> = {
+  dispatch: TriangleAlert,
+  monitor: Diamond,
+  healthy: CircleCheck,
 }
 </script>
 
@@ -90,25 +98,32 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 
     <template v-else-if="dispatch && summary && meta">
       <header class="fleet-header">
-        <div>
-          <p class="fleet-header__eyebrow">Fleet</p>
-          <h1 class="fleet-header__title">
-            {{ summary.site_count }} sites
-            <span class="fleet-header__divider">·</span>
-            {{ summary.total_capacity_mwp }} MWp
-            <span class="fleet-header__divider">·</span>
-            {{ summary.cohort_count }} cohorts
-          </h1>
-        </div>
-        <div class="fleet-header__right">
+        <div class="fleet-header__identity">
+          <h1 class="fleet-header__title">This month's dispatch list</h1>
           <p class="fleet-header__month">{{ meta.reporting_month_label }}</p>
-          <DataStatusBadge :status="meta.data_status" />
         </div>
+
+        <dl class="fleet-header__stats">
+          <div class="fleet-header__stat">
+            <dt>Sites</dt>
+            <dd>{{ summary.site_count }}</dd>
+          </div>
+          <div class="fleet-header__stat">
+            <dt>Capacity</dt>
+            <dd>{{ summary.total_capacity_mwp }} MWp</dd>
+          </div>
+          <div class="fleet-header__stat">
+            <dt>Cohorts</dt>
+            <dd>{{ summary.cohort_count }}</dd>
+          </div>
+        </dl>
+
+        <DataStatusBadge :status="meta.data_status" />
       </header>
 
-      <p v-if="source === 'fallback'" class="notice">
+      <NoticeCallout v-if="source === 'fallback'" tone="warning" compact class="notice">
         Serving the committed fallback copy — the primary source was unreachable.
-      </p>
+      </NoticeCallout>
 
       <div class="layout">
         <aside class="map-column">
@@ -122,9 +137,13 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
         <section class="list">
           <section v-for="group in groups" :key="group.status" class="group">
             <h2 class="group__heading">
-              <span class="group__glyph" :class="`group__glyph--${group.status}`" aria-hidden="true">
-                {{ STATUS_GLYPH[group.status] }}
-              </span>
+              <component
+                :is="STATUS_ICON[group.status]"
+                class="group__glyph"
+                :class="`group__glyph--${group.status}`"
+                :size="14"
+                aria-hidden="true"
+              />
               {{ group.heading }}
               <span class="group__count">({{ group.sites.length }})</span>
               <span class="group__note">— {{ group.note }}</span>
@@ -134,10 +153,11 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 
             <ol v-else class="rows">
               <li
-                v-for="site in group.sites"
+                v-for="(site, rowIndex) in group.sites"
                 :key="site.site_id"
                 class="row"
                 :class="{ 'row--active': site.site_id === activeSiteId }"
+                :style="{ '--row-index': rowIndex }"
                 tabindex="0"
                 role="button"
                 @mouseenter="activeSiteId = site.site_id"
@@ -155,15 +175,20 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
                     {{ site.address }}
                     <span class="row__divider">·</span>
                     {{ cohortLabel(site) }}
-                    <span v-if="cohortBelowMinimum(site)" class="row__caution" title="Cohort is below the minimum size — peer comparison is weak here">
-                      ⚠ cohort below minimum
+                    <span
+                      v-if="cohortBelowMinimum(site)"
+                      class="row__caution"
+                      title="Cohort is below the minimum size — peer comparison is weak here"
+                    >
+                      <TriangleAlert :size="11" aria-hidden="true" /> cohort below minimum
                     </span>
                     <span
                       v-if="site.excluded_from_analysis"
                       class="row__excluded"
                       :title="site.excluded_from_analysis.detail"
                     >
-                      ⊘ excluded — {{ site.excluded_from_analysis.reason.replace('_', ' ') }}
+                      <CircleSlash :size="11" aria-hidden="true" /> excluded —
+                      {{ site.excluded_from_analysis.reason.replace('_', ' ') }}
                     </span>
                   </span>
                   <span v-if="site.hypothesis" class="row__hypothesis">
@@ -181,8 +206,10 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 
                 <span class="row__days">
                   <template v-if="site.divergence">
-                    <span class="row__days-value">▲ {{ site.divergence.days_since }}</span>
-                    <span class="row__days-unit">days</span>
+                    <span class="row__days-value">
+                      <Clock :size="12" aria-hidden="true" /> {{ site.divergence.days_since }}
+                    </span>
+                    <span class="row__days-unit">days diverging</span>
                   </template>
                 </span>
 
@@ -255,59 +282,69 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 }
 
 /* --- Header --- */
+/* No eyebrow. The h1 is the page's actual name — "This month's dispatch
+   list" — and carries its own weight rather than being introduced by a
+   small caption above it. Fleet-wide stats read as a labeled stat row,
+   not folded into the heading's sentence. */
 
 .fleet-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-end;
+  gap: 1.25rem;
+  align-items: center;
   justify-content: space-between;
-  padding-bottom: 1rem;
+  padding-bottom: 1.1rem;
   border-bottom: 1px solid var(--border-hairline);
 }
 
-.fleet-header__eyebrow {
-  margin: 0 0 0.2rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.fleet-header__identity {
+  min-width: 0;
 }
 
 .fleet-header__title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 600;
-  line-height: 1.2;
-}
-
-.fleet-header__divider {
-  color: var(--text-muted);
-  margin: 0 0.3rem;
-  font-weight: 400;
-}
-
-.fleet-header__right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.4rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .fleet-header__month {
-  margin: 0;
-  font-size: 1rem;
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
   color: var(--text-secondary);
+}
+
+.fleet-header__stats {
+  display: flex;
+  gap: 1.75rem;
+  margin: 0 0 0 auto;
+}
+
+.fleet-header__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.fleet-header__stat dt {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fleet-header__stat dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .notice {
   margin: 1rem 0 0;
-  padding: 0.6rem 0.8rem;
-  border-left: 3px solid var(--status-warning);
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 
 /* --- Layout --- */
@@ -327,8 +364,9 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 }
 
 .map-column {
+  /* Clears the sticky brand nav (App.vue) plus a little breathing room. */
   position: sticky;
-  top: 1.5rem;
+  top: calc(3.5rem + 1rem);
 }
 
 @media (max-width: 900px) {
@@ -346,13 +384,17 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 .group__heading {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.45rem;
   margin: 0 0 0.6rem;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.group__glyph {
+  flex: none;
 }
 
 .group__glyph--dispatch {
@@ -404,14 +446,37 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: border-color 120ms ease;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  /* The one authored motion moment on this screen: rows settle into place on
+     arrival, staggered by list position. A single entrance, not a per-element
+     effect library — everything else in the product stays still.
+     prefers-reduced-motion zeroes the duration globally (theme.css). */
+  animation: row-enter var(--duration-base) var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 35ms);
 }
 
+/* Interaction state is a full-perimeter border + tint, deliberately not a
+   colored border-left — that idiom is reserved for status callouts, and a
+   row's status is already carried by its group icon, not by this border. */
 .row:hover,
 .row--active,
 .row:focus-visible {
-  border-color: var(--text-muted);
+  border-color: var(--action-text);
+  background: var(--callout-info-bg);
   outline: none;
+}
+
+@keyframes row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -456,6 +521,9 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 }
 
 .row__caution {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
   color: var(--status-serious);
   margin-left: 0.3rem;
   font-weight: 600;
@@ -463,6 +531,9 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 
 /* Not a triage state — a statement that this site is not being judged at all. */
 .row__excluded {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
   color: var(--text-secondary);
   margin-left: 0.3rem;
   font-weight: 600;
@@ -504,6 +575,9 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
 }
 
 .row__days-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text-secondary);
@@ -525,12 +599,20 @@ const STATUS_GLYPH: Record<SiteStatus, string> = {
   padding: 0.5rem 1rem 0.5rem 0;
 }
 
+/*
+ * The one place on this screen brand color carries real weight: the two
+ * headline numbers behind the product's actual claim — sites not visited,
+ * money saved. Everywhere else on the page stays neutral so this stays
+ * the moment that reads as "the point". The secondary "total at risk" tile
+ * overrides back to neutral text below — it is context, not the headline.
+ */
 .outcome__value {
   margin: 0;
   font-size: 2.4rem;
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.02em;
+  color: var(--action-text);
 }
 
 .outcome__value--small {

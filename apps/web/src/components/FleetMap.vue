@@ -25,6 +25,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
+import { TriangleAlert, Diamond, CircleCheck } from '@lucide/vue'
 import type { Site, SiteStatus } from '@/types/dispatch'
 
 const props = defineProps<{
@@ -40,16 +41,79 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let clusterGroup: L.MarkerClusterGroup | null = null
+let baseLayer: L.TileLayer | null = null
 const markersBySiteId = new Map<string, L.Marker>()
 
 /**
- * Status colors are reserved and always pair with a glyph, so meaning never
- * rests on color alone — the same rule the list rows follow.
+ * Esri's gray canvas, light and dark, on purpose and after checking alternatives.
+ *
+ * CARTO's free raster tiles now burn "API KEY REQUIRED" across every tile —
+ * they return 200, so nothing errors and nothing logs, the watermark just sits
+ * over the fleet map. OpenStreetMap's own servers return a 418 "access blocked"
+ * tile to anything their usage policy does not recognise, which is not a
+ * dependency to carry into a public judging window.
+ *
+ * Both endpoints below need no key, and being desaturated they let the status
+ * markers carry the only color on the map, which is the point of the screen.
  */
-const STATUS_STYLE: Record<SiteStatus, { color: string; glyph: string }> = {
-  dispatch: { color: 'var(--status-critical)', glyph: '▲' },
-  monitor: { color: 'var(--status-warning)', glyph: '◆' },
-  healthy: { color: 'var(--status-good)', glyph: '●' },
+const BASEMAP_ROOT = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
+const BASEMAP = {
+  light: `${BASEMAP_ROOT}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  dark: `${BASEMAP_ROOT}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+} as const
+
+/**
+ * Resolve the theme the same way theme.css does, and in the same order: an
+ * explicit `data-theme` stamp wins, and only when there is none does the OS
+ * preference decide. Reading just one of the two gets it wrong in the state
+ * most viewers are actually in — unstamped, following their system.
+ */
+function prefersDark(): boolean {
+  const stamped = document.documentElement.dataset.theme
+  if (stamped === 'dark') return true
+  if (stamped === 'light') return false
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+function applyBasemap(): void {
+  baseLayer?.setUrl(prefersDark() ? BASEMAP.dark : BASEMAP.light)
+}
+
+/**
+ * Status colors are reserved and always pair with a glyph, so meaning never
+ * rests on color alone — the same rule the list rows follow. Same icon
+ * vocabulary as DispatchView and InverterPanel: triangle = needs action,
+ * diamond = watch it, circle-check = fine.
+ *
+ * Leaflet renders marker icons and popups from raw HTML strings OUTSIDE
+ * Vue's tree, so a Vue icon component cannot be mounted here — these are the
+ * exact stroke paths lucide's TriangleAlert / Diamond / CircleCheck ship,
+ * reproduced as literal SVG markup so the marker matches the rest of the
+ * product's icon language pixel-for-pixel rather than approximating it.
+ */
+const STATUS_ICON_PATH: Record<SiteStatus, string> = {
+  dispatch:
+    '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>' +
+    '<path d="M12 9v4"/><path d="M12 17h.01"/>',
+  monitor:
+    '<path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 ' +
+    '2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z"/>',
+  healthy: '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
+}
+
+const STATUS_STYLE: Record<SiteStatus, { color: string }> = {
+  dispatch: { color: 'var(--status-critical)' },
+  monitor: { color: 'var(--status-warning)' },
+  healthy: { color: 'var(--status-good)' },
+}
+
+function markerSvg(status: SiteStatus): string {
+  return (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
+    STATUS_ICON_PATH[status] +
+    '</svg>'
+  )
 }
 
 function buildIcon(site: Site, isActive: boolean): L.DivIcon {
@@ -58,7 +122,7 @@ function buildIcon(site: Site, isActive: boolean): L.DivIcon {
     className: 'fleet-marker-wrapper',
     html: `<span class="fleet-marker${isActive ? ' fleet-marker--active' : ''}"
                  style="color:${style.color}"
-                 title="${site.name} — ${site.status}">${style.glyph}</span>`,
+                 title="${site.name} — ${site.status}">${markerSvg(site.status)}</span>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
   })
@@ -103,6 +167,9 @@ function renderMarkers(): void {
   }
 }
 
+let themeObserver: MutationObserver | null = null
+let darkQuery: MediaQueryList | null = null
+
 onMounted(() => {
   if (!container.value) return
 
@@ -111,8 +178,8 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
+  baseLayer = L.tileLayer(prefersDark() ? BASEMAP.dark : BASEMAP.light, {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
     maxZoom: 19,
   }).addTo(map)
 
@@ -126,12 +193,28 @@ onMounted(() => {
   map.addLayer(clusterGroup)
 
   renderMarkers()
+
+  // Two sources, because the theme has three states. The attribute fires when
+  // something stamps an explicit choice; the media query fires for everyone
+  // else, which today is every viewer — nothing in the app sets data-theme yet.
+  themeObserver = new MutationObserver(applyBasemap)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
+  darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  darkQuery.addEventListener('change', applyBasemap)
 })
 
 onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
+  darkQuery?.removeEventListener('change', applyBasemap)
+  darkQuery = null
   map?.remove()
   map = null
   clusterGroup = null
+  baseLayer = null
   markersBySiteId.clear()
 })
 
@@ -158,9 +241,18 @@ watch(
   <div class="map-frame">
     <div ref="container" class="map-canvas"></div>
     <p class="map-legend">
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--dispatch">▲</span> dispatch</span>
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--monitor">◆</span> monitor</span>
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--healthy">●</span> healthy</span>
+      <span class="map-legend__item">
+        <TriangleAlert class="map-legend__glyph map-legend__glyph--dispatch" :size="13" aria-hidden="true" />
+        dispatch
+      </span>
+      <span class="map-legend__item">
+        <Diamond class="map-legend__glyph map-legend__glyph--monitor" :size="13" aria-hidden="true" />
+        monitor
+      </span>
+      <span class="map-legend__item">
+        <CircleCheck class="map-legend__glyph map-legend__glyph--healthy" :size="13" aria-hidden="true" />
+        healthy
+      </span>
       <span class="map-legend__hint">numbered circles group nearby sites — click to fan out</span>
     </p>
   </div>
@@ -174,19 +266,29 @@ watch(
   background: var(--surface-1);
 }
 
-/* Half the viewport height. Tall enough that the Vegas and Mid-Atlantic
-   clusters are both readable without zooming, and it stays put while the
-   list scrolls beside it. */
+/*
+ * Height is set from the FLEET'S OWN ASPECT, not from the viewport.
+ *
+ * `fitBounds` zooms until the bounding box fits BOTH axes, so the more
+ * constrained axis wins. This fleet spans roughly 3,600 km east-west and
+ * 500 km north-south — a very wide, flat box — inside a column that is at
+ * most 420px wide. Width is therefore always the binding constraint, and at
+ * 50vh the leftover vertical space was filled with several thousand km of
+ * empty ocean and continent: the screen opened on a map of the Americas
+ * rather than a map of the fleet.
+ *
+ * A shorter frame spends the pixels on the sites instead. It cannot change
+ * the zoom — width still decides that — but it stops the map from paying for
+ * latitude nobody is looking at.
+ */
 .map-canvas {
-  height: 50vh;
-  min-height: 380px;
+  height: 320px;
   width: 100%;
 }
 
 @media (max-width: 900px) {
   .map-canvas {
-    height: 42vh;
-    min-height: 260px;
+    height: 260px;
   }
 }
 
@@ -206,6 +308,10 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.map-legend__glyph {
+  flex: none;
 }
 
 .map-legend__glyph--dispatch {
@@ -235,15 +341,17 @@ watch(
   place-items: center;
   width: 22px;
   height: 22px;
-  font-size: 14px;
   line-height: 1;
-  /* A surface-colored ring keeps overlapping marks legible. */
-  text-shadow:
-    0 0 3px var(--surface-1),
-    0 0 3px var(--surface-1),
-    0 0 3px var(--surface-1);
   cursor: pointer;
-  transition: transform 120ms ease;
+  transition: transform var(--duration-fast, 140ms) ease;
+}
+
+.fleet-marker svg {
+  /* A surface-colored ring keeps overlapping marks legible, same intent as
+     the old text-shadow trick, expressed for a stroked SVG instead of text. */
+  filter:
+    drop-shadow(0 0 2px var(--surface-1, #fff))
+    drop-shadow(0 0 2px var(--surface-1, #fff));
 }
 
 .fleet-marker--active {

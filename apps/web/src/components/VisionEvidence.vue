@@ -159,6 +159,34 @@ async function analyseImage() {
   color: var(--text-secondary);
 }
 
+.vision input[type='file'] {
+  display: block;
+  width: 100%;
+  max-width: 22rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.vision input[type='file']::file-selector-button {
+  margin-right: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--baseline);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.vision input[type='file']::file-selector-button:hover {
+  border-color: var(--action-text);
+  color: var(--action-text);
+}
+
 .vision__preview {
   display: block;
   max-width: 320px;
@@ -167,16 +195,40 @@ async function analyseImage() {
   border-radius: var(--radius-sm);
 }
 
+/* Matches the primary action treatment used on Site Detail and the work
+   order — this button was previously an unstyled browser default, which is
+   the one control in the product that looked like nobody had reached it. */
 .vision__button {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-top: 1rem;
   padding: 0.55rem 0.9rem;
+  background: var(--action-fill);
+  color: var(--action-ink);
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.vision__button:hover:not(:disabled) {
+  background: var(--action-fill-hover);
+}
+
+.vision__button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .vision__button:disabled {
+  background: var(--baseline);
+  color: var(--text-muted);
   cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .vision__result {
@@ -191,6 +243,6 @@ async function analyseImage() {
 }
 
 .vision__error {
-  color: var(--status-danger);
+  color: var(--status-critical);
 }
 </style>

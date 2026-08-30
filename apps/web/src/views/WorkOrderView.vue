@@ -20,9 +20,11 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { ArrowLeft, ArrowRight, Zap, Thermometer, Printer } from '@lucide/vue'
 import { loadDispatch, findSite, findCohort, formatRinggit, formatCapacity } from '@/services/api'
 import type { Dispatch, Site } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
+import NoticeCallout from '@/components/NoticeCallout.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -233,17 +235,22 @@ function printCard(): void {
 
     <template v-else>
       <nav class="crumbs no-print">
-        <RouterLink to="/">← Dispatch list</RouterLink>
-        <RouterLink :to="`/site/${site.site_id}`">Site detail</RouterLink>
-        <button type="button" class="print-button" @click="printCard">Print / export</button>
+        <RouterLink to="/" class="crumbs__link">
+          <ArrowLeft :size="14" aria-hidden="true" /> Dispatch list
+        </RouterLink>
+        <RouterLink :to="`/site/${site.site_id}`" class="crumbs__link">Site detail</RouterLink>
+        <button type="button" class="print-button" @click="printCard">
+          <Printer :size="15" aria-hidden="true" /> Print / export
+        </button>
       </nav>
 
       <article class="card">
         <header class="card__head">
           <div>
-            <p class="card__eyebrow">Work order · {{ dispatch?.meta.reporting_month_label }}</p>
-            <h1 class="card__title">{{ site.name }}</h1>
-            <p class="card__address">{{ site.address }}</p>
+            <h1 class="card__title">Work order — {{ site.name }}</h1>
+            <p class="card__address">
+              {{ site.address }} · {{ dispatch?.meta.reporting_month_label }}
+            </p>
           </div>
           <div class="card__meta">
             <DataStatusBadge :status="site.data_status" />
@@ -252,7 +259,7 @@ function printCard(): void {
         </header>
 
         <!-- Why this site, in plain language, before any technical detail. -->
-        <p class="rationale">{{ selectionRationale }}</p>
+        <NoticeCallout tone="info" class="rationale">{{ selectionRationale }}</NoticeCallout>
 
         <!-- Rank context: where this site sits against the others competing for
              the same technician. A number without its peers is not an argument. -->
@@ -328,12 +335,12 @@ function printCard(): void {
           <!-- The decision drawn, so the branch not taken is visible too. -->
           <div class="route">
             <div class="route__node route__node--start">Hypothesis<br /><strong>{{ verification.kind }}</strong></div>
-            <div class="route__arrow" aria-hidden="true">→</div>
+            <ArrowRight class="route__arrow" :size="18" aria-hidden="true" />
             <div
               class="route__node"
               :class="verification.kind === 'electrical' ? 'route__node--active' : 'route__node--dim'"
             >
-              <span class="route__icon" aria-hidden="true">⚡</span>
+              <Zap class="route__icon" :size="18" aria-hidden="true" />
               Combiner box<br />&amp; inverter display
               <span class="route__tag">no drone</span>
             </div>
@@ -341,7 +348,7 @@ function printCard(): void {
               class="route__node"
               :class="verification.kind === 'module' ? 'route__node--active' : 'route__node--dim'"
             >
-              <span class="route__icon" aria-hidden="true">🛩</span>
+              <Thermometer class="route__icon" :size="18" aria-hidden="true" />
               Thermal pass<br />before roof entry
               <span class="route__tag">avoids permits</span>
             </div>
@@ -385,13 +392,14 @@ function printCard(): void {
         <section v-if="site.sub_site" class="section">
           <h2 class="section__title">Units to inspect first</h2>
           <p class="section__meta">{{ site.sub_site.method }}</p>
-          <p
+          <NoticeCallout
             v-if="site.sub_site.comparability_note"
             class="comparability"
-            :class="site.sub_site.units_comparable ? 'comparability--ok' : 'comparability--warn'"
+            compact
+            :tone="site.sub_site.units_comparable ? 'good' : 'warning'"
           >
-            {{ site.sub_site.units_comparable ? '✓' : '⚠' }} {{ site.sub_site.comparability_note }}
-          </p>
+            {{ site.sub_site.comparability_note }}
+          </NoticeCallout>
           <ul class="units">
             <li v-for="unit in site.sub_site.units" :key="unit.unit_id" class="units__row">
               <span class="units__id">{{ unit.unit_id }}</span>
@@ -478,23 +486,50 @@ function printCard(): void {
   font-size: 0.85rem;
 }
 
-.crumbs a {
+.crumbs__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
   color: var(--text-secondary);
   text-decoration: none;
+  border-radius: var(--radius-sm);
 }
 
+.crumbs__link:hover {
+  color: var(--action-text);
+}
+
+/* The primary action on each of the two places it appears: print the card,
+   and commit the findings. Amber fill + navy ink, matching the work-order
+   button on Site Detail — one action treatment across the product. */
 .print-button,
 .save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-left: auto;
-  padding: 0.45rem 0.9rem;
-  background: var(--text-primary);
-  color: var(--surface-1);
+  padding: 0.5rem 0.9rem;
+  background: var(--action-fill);
+  color: var(--action-ink);
   border: none;
   border-radius: var(--radius-sm);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.print-button:hover,
+.save-button:hover {
+  background: var(--action-fill-hover);
+}
+
+.print-button:active,
+.save-button:active {
+  transform: scale(0.97);
 }
 
 .save-button {
@@ -518,19 +553,12 @@ function printCard(): void {
   border-bottom: 2px solid var(--text-primary);
 }
 
-.card__eyebrow {
-  margin: 0 0 0.3rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .card__title {
   margin: 0;
   font-size: 1.5rem;
+  font-weight: 600;
   line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .card__address {
@@ -552,14 +580,11 @@ function printCard(): void {
   color: var(--text-muted);
 }
 
+/* Tint, border and icon come from NoticeCallout. This previously used --series-1,
+   a CHART categorical colour, as a page-chrome accent — series colours are
+   reserved for data marks and borrowing one here quietly broke that rule. */
 .rationale {
-  margin: 1rem 0 0;
-  padding: 0.75rem 0.9rem;
-  background: var(--page-plane);
-  border-left: 3px solid var(--series-1);
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  line-height: 1.6;
+  margin-top: 1rem;
 }
 
 .facts {
@@ -817,13 +842,15 @@ function printCard(): void {
 
 .route__icon {
   display: block;
-  font-size: 1rem;
-  margin-bottom: 0.2rem;
+  margin: 0 auto 0.3rem;
 }
 
+/* Block, not inline-block: the node's label ends in a <br />-separated line,
+   so an inline tag ran on from it and read as "& inverter display NO DRONE"
+   — one sentence instead of a label and its qualifier. */
 .route__tag {
-  display: inline-block;
-  margin-top: 0.35rem;
+  display: block;
+  margin-top: 0.4rem;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -916,23 +943,10 @@ function printCard(): void {
   letter-spacing: 0;
 }
 
+/* Tint, border and icon come from NoticeCallout; tone is bound to whether the
+   units are actually comparable. */
 .comparability {
   margin: 0.5rem 0 0.75rem;
-  padding: 0.5rem 0.7rem;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  border-radius: var(--radius-sm);
-}
-
-.comparability--ok {
-  border-left: 3px solid var(--status-good);
-  color: var(--text-muted);
-}
-
-.comparability--warn {
-  border-left: 3px solid var(--status-critical);
-  background: var(--page-plane);
-  color: var(--text-secondary);
 }
 
 /* --- Findings --- */

@@ -15,8 +15,10 @@
  * PVDAQ does not publish per inverter.
  */
 import { computed, ref } from 'vue'
+import { TriangleAlert, Diamond, CircleCheck } from '@lucide/vue'
 import type { SubSite, SubSiteUnit, Evidence } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
+import NoticeCallout from '@/components/NoticeCallout.vue'
 
 const props = defineProps<{
   subSite: SubSite
@@ -50,7 +52,14 @@ function severity(unit: SubSiteUnit): 'critical' | 'serious' | 'warning' | 'norm
   return 'normal'
 }
 
-const SEVERITY_GLYPH = { critical: '▲', serious: '▲', warning: '◆', normal: '●' } as const
+/* Same three silhouettes as the fleet list and the map, one level down:
+   triangle = needs action, diamond = watch it, circle-check = fine. */
+const SEVERITY_ICON = {
+  critical: TriangleAlert,
+  serious: TriangleAlert,
+  warning: Diamond,
+  normal: CircleCheck,
+} as const
 
 function sparklinePath(unit: SubSiteUnit): string {
   const points = unit.series
@@ -96,25 +105,29 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
     <p class="sub__basis">{{ subSite.comparison_basis }}</p>
 
     <!-- The most important caveat on this panel: are these units even comparable? -->
-    <p v-if="!subSite.units_comparable" class="sub__caveat sub__caveat--hard">
-      ⚠ {{ subSite.comparability_note }}
-    </p>
-    <p v-else-if="subSite.comparability_note" class="sub__ok">
-      ✓ {{ subSite.comparability_note }}
-    </p>
+    <NoticeCallout v-if="!subSite.units_comparable" tone="warning" compact class="sub__note">
+      {{ subSite.comparability_note }}
+    </NoticeCallout>
+    <NoticeCallout v-else-if="subSite.comparability_note" tone="good" compact class="sub__note">
+      {{ subSite.comparability_note }}
+    </NoticeCallout>
 
-    <p v-if="twoUnitCaveat" class="sub__caveat">
-      ⚠ With two units the median lies midway between them, so deviations are always a
-      symmetric pair. Read the magnitude, not the sign balance.
-    </p>
+    <NoticeCallout v-if="twoUnitCaveat" tone="warning" compact class="sub__note">
+      With two units the median lies midway between them, so deviations are always a symmetric
+      pair. Read the magnitude, not the sign balance.
+    </NoticeCallout>
 
     <ol class="units">
       <li v-for="unit in subSite.units" :key="unit.unit_id" class="unit">
         <button class="unit__row" type="button" @click="toggle(unit.unit_id)">
           <span class="unit__id">
-            <span class="unit__glyph" :class="`unit__glyph--${severity(unit)}`" aria-hidden="true">
-              {{ SEVERITY_GLYPH[severity(unit)] }}
-            </span>
+            <component
+              :is="SEVERITY_ICON[severity(unit)]"
+              class="unit__glyph"
+              :class="`unit__glyph--${severity(unit)}`"
+              :size="13"
+              aria-hidden="true"
+            />
             {{ unit.unit_id }}
           </span>
 
@@ -234,27 +247,9 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
   line-height: 1.5;
 }
 
-.sub__caveat {
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.7rem;
-  border-left: 3px solid var(--status-serious);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.sub__caveat--hard {
-  border-left-color: var(--status-critical);
-  background: var(--page-plane);
-}
-
-.sub__ok {
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.7rem;
-  border-left: 3px solid var(--status-good);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--text-muted);
+/* Tint, border and icon come from NoticeCallout. */
+.sub__note {
+  margin-top: 0.75rem;
 }
 
 .units {
@@ -306,6 +301,10 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
   font-weight: 600;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+}
+
+.unit__glyph {
+  flex: none;
 }
 
 .unit__glyph--critical {
@@ -409,7 +408,7 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
 
 .detail {
   padding: 0.9rem 0.6rem 0.6rem;
-  border-left: 2px solid var(--border-hairline);
+  border-left: 1px solid var(--border-hairline);
   margin: 0.2rem 0 0.4rem 1rem;
 }
 

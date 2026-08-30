@@ -16,6 +16,7 @@
  * colour is reinforcement and never the only channel.
  */
 import { computed, ref } from 'vue'
+import { TriangleAlert, CircleCheck } from '@lucide/vue'
 import type { SubSite, SubSiteUnit, Evidence } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 
@@ -114,7 +115,12 @@ function formatSigned(value: number, digits = 1): string {
             class="detail__tag"
             :class="isHottest(selectedUnit) ? 'detail__tag--hot' : 'detail__tag--normal'"
           >
-            {{ isHottest(selectedUnit) ? '▲ hottest unit' : '● within sibling range' }}
+            <component
+              :is="isHottest(selectedUnit) ? TriangleAlert : CircleCheck"
+              :size="12"
+              aria-hidden="true"
+            />
+            {{ isHottest(selectedUnit) ? 'hottest unit' : 'within sibling range' }}
           </span>
         </header>
 
@@ -327,6 +333,9 @@ function formatSigned(value: number, digits = 1): string {
 }
 
 .detail__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.04em;
