@@ -501,12 +501,6 @@ const assumptionRows = computed(() => {
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 .head {
   display: flex;
   flex-wrap: wrap;
