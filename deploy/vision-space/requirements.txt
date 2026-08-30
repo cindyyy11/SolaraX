@@ -1,0 +1,17 @@
+# Dependencies for the hosted SolaraX Vision API (Hugging Face Space).
+#
+# This is the M5 vision lane only — it deliberately does NOT install the BATCH
+# pipeline's packages (pandas, pvlib, scipy, ...). The hosted service classifies
+# an uploaded image and nothing else.
+#
+# CPU-only torch: the free HF Space has no GPU, and the CPU wheels are a much
+# smaller download than the default CUDA build.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+
+ultralytics>=8.3          # YOLOv8n-cls inference
+fastapi>=0.115
+uvicorn[standard]>=0.30   # ASGI server
+python-multipart>=0.0.9   # required for UploadFile / File(...) form parsing
