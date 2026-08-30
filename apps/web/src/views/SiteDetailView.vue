@@ -171,7 +171,10 @@ const cohort = computed(() => {
         than rendering nothing. See VISION_API_URL in services/api.ts.
       -->
       <section v-if="site.detection && visionAvailable" class="block">
-        <VisionEvidence />
+        <VisionEvidence
+          :site-id="site.site_id"
+          :site-name="site.name"
+        />
       </section>
 
     </template>
