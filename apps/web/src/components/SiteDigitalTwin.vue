@@ -3,10 +3,10 @@ import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue
 import { Box, Camera, CircleStop, Play, RotateCcw, ScanLine } from '@lucide/vue'
 import type { Site } from '@/types/dispatch'
 import type { ScenarioResult } from '@/types/scenario'
-import type { InspectionMode, InspectionRoute } from '@/types/inspection'
+import type { InspectionRoute } from '@/types/inspection'
 
 const SiteWebGLScene = defineAsyncComponent(() => import('@/components/SiteWebGLScene.vue'))
-const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string; scenarioId?: string; embedded?: boolean; route?: InspectionRoute; inspectionMode?: InspectionMode; activeWaypoint?: number; severity?: number }>()
+const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string; scenarioId?: string; embedded?: boolean; route?: InspectionRoute; viewMode?: 'operational' | 'interactive'; scenarioActive?: boolean; activeWaypoint?: number; severity?: number }>()
 
 type CameraPreset = 'overview' | 'roof' | 'anomaly' | 'drone'
 
@@ -121,11 +121,11 @@ onBeforeUnmount(() => { stopReplay(); if (transitionTimer) clearTimeout(transiti
           </button>
         </div>
 
-        <div class="scene-viewport" :class="[`camera--${activeCamera}`, scenario?.affectedLayer ? `layer--${scenario.affectedLayer}` : '', scenarioId ? `scenario--${scenarioId}` : '']">
+        <div class="scene-viewport" :class="[`camera--${activeCamera}`, scenarioActive && scenario?.affectedLayer ? `layer--${scenario.affectedLayer}` : '', scenarioActive && scenarioId ? `scenario--${scenarioId}` : '', { 'scene-viewport--interactive': viewMode === 'interactive' }]">
           <div class="sky-glow" aria-hidden="true"></div>
           <div class="scenario-atmosphere" aria-hidden="true"></div>
           <div v-if="isScenarioChanging" class="scenario-transition" role="status">Applying {{ scenarioLabel }}…</div>
-          <SiteWebGLScene v-if="route" :route="route" :mode="inspectionMode ?? 'guided'" :active-waypoint="activeWaypoint ?? 0" :severity="severity ?? 50" />
+          <SiteWebGLScene v-if="route && viewMode === 'interactive'" :key="`${route.scenarioId}-${scenarioActive}`" :route="route" :active-waypoint="activeWaypoint ?? 0" :severity="severity ?? 50" :scenario-active="scenarioActive ?? true" :camera-preset="activeCamera" />
           <div class="world" aria-hidden="true">
             <div class="roof">
               <div class="roof-grid"></div>
@@ -134,15 +134,15 @@ onBeforeUnmount(() => { stopReplay(); if (transitionTimer) clearTimeout(transiti
                 :key="panel"
                 class="panel-cell"
                 :class="{
-                  'panel-cell--anomaly': hasAnomaly && panel === 15,
-                  'panel-cell--scanned': activeStage >= 2 || Boolean(scenario),
+                  'panel-cell--anomaly': scenarioActive && hasAnomaly && panel === 15,
+                  'panel-cell--scanned': activeStage >= 2 || Boolean(scenarioActive && scenario),
                 }"
               >
                 <i></i><i></i><i></i>
               </div>
               <div class="inverter inverter--one"><span>INV-01</span></div>
               <div class="inverter inverter--two"><span>INV-02</span></div>
-              <div v-if="hasAnomaly" class="anomaly-beacon"><span>Suspect zone</span></div>
+              <div v-if="scenarioActive && hasAnomaly" class="anomaly-beacon"><span>Suspect zone</span></div>
               <div class="drone" :class="{ 'drone--flying': isPlaying || activeCamera === 'drone' }">
                 <span class="drone__body"></span>
                 <i v-for="arm in 4" :key="arm"></i>
@@ -280,6 +280,14 @@ onBeforeUnmount(() => { stopReplay(); if (transitionTimer) clearTimeout(transiti
 .anomaly-beacon { position: absolute; left: 45%; top: 59%; width: 5%; aspect-ratio: 1; transform: translateZ(22px); border-radius: 50%; background: #ff6a55; box-shadow: 0 0 0 6px rgba(255, 106, 85, .18), 0 0 22px #ff6a55; }
 .anomaly-beacon span { position: absolute; left: 140%; top: 50%; transform: translateY(-50%); padding: .2rem .4rem; color: #fff; background: rgba(29, 12, 10, .88); border-radius: 3px; font-size: .45rem; white-space: nowrap; }
 .route-line { position: absolute; left: 12%; top: 15%; width: 68%; height: 58%; transform: translateZ(30px); border: 1px dashed rgba(123, 224, 165, .66); border-radius: 42% 58% 48% 52%; }
+.scenario--soiling .route-line { left:10%; top:12%; width:74%; height:67%; border-radius:8%; }
+.scenario--partial-shading .route-line { left:7%; top:8%; width:84%; height:78%; border-radius:38% 12% 42% 18%; }
+.scenario--inverter-derating .route-line { left:62%; top:20%; width:27%; height:55%; border-radius:50%; }
+.scenario--string-underperformance .route-line { left:12%; top:48%; width:70%; height:8%; border-radius:0; }
+.scenario--thermal-hotspot .route-line { left:38%; top:46%; width:20%; height:24%; border-radius:50%; }
+.scenario--storm-damage .route-line { left:5%; top:6%; width:88%; height:82%; border-radius:14%; }
+.scenario--heatwave .route-line { left:18%; top:8%; width:62%; height:76%; border-radius:50%; }
+.scenario--curtailment .route-line { left:48%; top:42%; width:44%; height:18%; border-radius:0; }
 .drone { position: absolute; left: 20%; top: 20%; width: 7%; aspect-ratio: 1; z-index: 5; transform: translateZ(64px) rotateZ(16deg); transition: left 800ms var(--ease-in-out), top 800ms var(--ease-in-out); }
 .drone__body { position: absolute; inset: 30%; border-radius: 35%; background: #eef4f1; box-shadow: 0 5px 10px rgba(0,0,0,.35); }
 .drone i { position: absolute; left: 45%; top: 45%; width: 55%; height: 2px; transform-origin: left center; background: #b8c4c0; }
@@ -288,6 +296,22 @@ onBeforeUnmount(() => { stopReplay(); if (transitionTimer) clearTimeout(transiti
 .drone__scan { position: absolute; left: 20%; top: 74%; color: #7be0a5; transform: rotateX(-58deg); filter: drop-shadow(0 0 5px #7be0a5); }
 .drone--flying { animation: drone-route 5.4s linear infinite; }
 @keyframes drone-route { 0% { left: 16%; top: 17%; } 25% { left: 69%; top: 20%; } 50% { left: 70%; top: 68%; } 75% { left: 34%; top: 65%; } 100% { left: 16%; top: 17%; } }
+.scenario--soiling .drone--flying { animation-name:drone-serpentine; }
+.scenario--partial-shading .drone--flying { animation-name:drone-perimeter; }
+.scenario--inverter-derating .drone--flying { animation-name:drone-equipment; }
+.scenario--string-underperformance .drone--flying { animation-name:drone-string; }
+.scenario--thermal-hotspot .drone--flying { animation-name:drone-orbit; }
+.scenario--storm-damage .drone--flying { animation-name:drone-damage; }
+.scenario--heatwave .drone--flying { animation-name:drone-thermal-wide; }
+.scenario--curtailment .drone--flying { animation-name:drone-grid; }
+@keyframes drone-serpentine { 0%{left:14%;top:18%} 20%{left:72%;top:18%} 40%{left:20%;top:38%} 60%{left:72%;top:55%} 80%{left:20%;top:72%} 100%{left:14%;top:18%} }
+@keyframes drone-perimeter { 0%{left:10%;top:12%} 25%{left:78%;top:12%} 50%{left:78%;top:72%} 75%{left:10%;top:72%} 100%{left:10%;top:12%} }
+@keyframes drone-equipment { 0%,100%{left:72%;top:25%} 50%{left:76%;top:64%} }
+@keyframes drone-string { 0%{left:12%;top:50%} 100%{left:76%;top:50%} }
+@keyframes drone-orbit { 0%{left:42%;top:45%} 25%{left:57%;top:45%} 50%{left:57%;top:62%} 75%{left:42%;top:62%} 100%{left:42%;top:45%} }
+@keyframes drone-damage { 0%{left:8%;top:10%} 30%{left:82%;top:12%} 65%{left:55%;top:55%} 100%{left:8%;top:10%} }
+@keyframes drone-thermal-wide { 0%,100%{left:24%;top:18%} 50%{left:68%;top:65%} }
+@keyframes drone-grid { 0%{left:48%;top:50%} 100%{left:86%;top:50%} }
 .scene-readout { position: absolute; left: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .1rem; padding: .65rem .75rem; background: rgba(7, 16, 14, .86); border: 1px solid rgba(255,255,255,.1); border-radius: var(--radius-sm); }
 .scene-readout span { color: #7be0a5; font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .scene-readout strong { font-size: .82rem; } .scene-readout small { color: #aebdb8; font-size: .65rem; text-transform: capitalize; }
