@@ -251,7 +251,7 @@ function printCard(): void {
 </script>
 
 <template>
-  <main class="screen">
+  <main class="screen screen--narrow">
     <p v-if="isLoading">Loading…</p>
     <p v-else-if="!site">No site with id {{ route.params.siteId }}.</p>
 
@@ -261,7 +261,7 @@ function printCard(): void {
           <ArrowLeft :size="14" aria-hidden="true" /> Dispatch list
         </RouterLink>
         <RouterLink :to="`/site/${site.site_id}`" class="crumbs__link">Site detail</RouterLink>
-        <button type="button" class="print-button" @click="printCard">
+        <button type="button" class="btn-primary print-button" @click="printCard">
           <Printer :size="15" aria-hidden="true" /> Print / export
         </button>
       </nav>
@@ -497,7 +497,7 @@ function printCard(): void {
           </label>
 
           <div class="field no-print">
-            <button type="button" class="save-button" @click="saveFindings">Save findings</button>
+            <button type="button" class="btn-primary save-button" @click="saveFindings">Save findings</button>
             <span v-if="savedAt" class="field__saved"
               >Saved {{ new Date(savedAt).toLocaleString() }}</span
             >
@@ -557,12 +557,6 @@ function printCard(): void {
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 .crumbs {
   display: flex;
   align-items: center;
@@ -587,34 +581,8 @@ function printCard(): void {
 /* The primary action on each of the two places it appears: print the card,
    and commit the findings. Amber fill + navy ink, matching the work-order
    button on Site Detail — one action treatment across the product. */
-.print-button,
-.save-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+.print-button {
   margin-left: auto;
-  padding: 0.5rem 0.9rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border: none;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.print-button:hover,
-.save-button:hover {
-  background: var(--action-fill-hover);
-}
-
-.print-button:active,
-.save-button:active {
-  transform: scale(0.97);
 }
 
 .save-button {
