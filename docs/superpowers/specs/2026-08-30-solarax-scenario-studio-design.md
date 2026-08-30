@@ -86,6 +86,28 @@ Scenario changes are visible in the scene:
 
 Each scene has Overview, Array, Equipment, Anomaly, and Drone camera presets where relevant. A static 2D/table alternative is always present.
 
+## Computer-vision evidence workspace
+
+Computer vision is corroborating evidence. It never silently changes detector ranking, site status, economic exposure, or the work-order recommendation. The original image and dispatch artifact remain immutable.
+
+The evidence workflow is:
+
+1. Select the site and evidence type.
+2. Upload by drag-and-drop, file chooser, or camera capture on supported mobile devices.
+3. Validate file type, minimum resolution, thermal-image suitability, blur, and unusable framing before upload.
+4. Show an image preview and allow replacement before analysis.
+5. Expose progress stages: uploading, checking quality, running model, and preparing overlay.
+6. Show a split result workspace with the original image, annotated image, confidence, model metadata, and recommended action.
+7. Compare visual evidence with electrical and thermal telemetry.
+8. Optionally send a selected region to the 3D site scene as inferred or simulated context.
+9. Attach the result to a work order as unverified until a human operator confirms it.
+
+Result states are explicit: confirmatory, conflicting, inconclusive, simulated demo, and service unavailable. Each state has a recovery or next action. Low confidence is labelled “review required,” not presented as a diagnosis.
+
+The visualization uses outlines and labels in addition to color, numeric temperatures where available, confidence bands, zoom/pan/reset controls, and a timeline containing capture date, upload time, model version, inference mode, and review status. On mobile, the workspace becomes image → finding → confidence → telemetry → action.
+
+The 3D handoff is permitted only as a visual explanation. If physical coordinates are unavailable, the interface must say “Illustrative placement” or “Simulated overlay.” A CV region cannot be described as a measured panel, string, inverter, or roof location without corresponding source geometry.
+
 ## Visual direction
 
 The whole system shares one design language with three tonal states:
@@ -121,6 +143,9 @@ Scenario calculations are pure functions with unit tests for severity bounds, du
 - No evidence: show “No visual evidence available” and keep performance evidence visible.
 - Healthy site: do not invent an anomaly beacon; show a healthy baseline and explain that no incident is active.
 - Stale data: show timestamp and last successful update while preserving browsing.
+- Vision image rejected: identify the failed quality check and offer replacement guidance before analysis.
+- Vision service unavailable: preserve the selected image locally for retry and keep electrical evidence visible.
+- Vision and electrical signals conflict: show both findings side by side and route to human verification.
 
 ## Accessibility and performance
 
@@ -144,4 +169,3 @@ Scenario calculations are pure functions with unit tests for severity bounds, du
 8. The same scenario state is reflected in the scene, readable metrics, and work-order context.
 9. Unit tests cover scenario calculations and reset behavior; type-check, lint, production build, and visual QA pass.
 10. No unsupported physical geometry, customer, deployment, or autonomous-drone claim is introduced.
-
