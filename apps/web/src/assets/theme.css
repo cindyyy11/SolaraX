@@ -141,6 +141,50 @@
      when the webfont lands is small rather than a visible jump. */
   --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Instrument Sans Variable', 'Inter Variable', system-ui, sans-serif;
+
+  /* Spacing — 4px rhythm, extends the --icon-xs/sm/md/lg naming precedent
+     above. Not retrofitted across every existing margin/padding in this
+     pass — used by the shared primitives in assets/layout.css and any new
+     spacing this pass adds. */
+  --space-3xs: 0.25rem;  /* 4px */
+  --space-2xs: 0.5rem;   /* 8px */
+  --space-xs: 0.75rem;   /* 12px */
+  --space-sm: 1rem;      /* 16px */
+  --space-md: 1.5rem;    /* 24px */
+  --space-lg: 2rem;      /* 32px */
+  --space-xl: 2.75rem;   /* 44px */
+  --space-2xl: 4rem;     /* 64px */
+
+  /* Container widths — the three widths already in use across the app,
+     named. Width varies by screen content on purpose (Dispatch's map+queue
+     genuinely needs more room than Work Order's printable card) — these
+     tokens don't force one width everywhere, they stop each screen
+     re-declaring its own copy of the same rule. */
+  --container-narrow: 1100px;   /* Work Order — a single printable card */
+  --container-standard: 1380px; /* Site Detail, Fleet Health */
+  --container-wide: 1600px;     /* Dispatch — map + queue workspace */
+
+  /* z-index — names the CURRENT values used elsewhere in the app; changes
+     none of them. Scoped to page-level chrome only. Leaflet (FleetMap),
+     deck.gl (FleetSkyline3D) and the CSS-3D scene (SiteDigitalTwin) manage
+     their own internal stacking contexts for library reasons and are NOT
+     part of this scale — do not compare their internal z-index values
+     against these tokens. */
+  --z-nav: 40;         /* .app-rail, .mobile-header */
+  --z-fab: 35;         /* DemoGuide launch button */
+  --z-overlay: 50;     /* DemoGuide open panel */
+  --z-skip-link: 1000; /* .skip-link — must always win */
+
+  /* Breakpoint convention (documented, not enforced — @media can't read
+     custom properties). Recorded now, as part of this foundation pass, for
+     future work to follow — this pass itself adds no new @media query. The
+     29 pre-existing @media queries elsewhere keep their current values
+     until a future pass touches them.
+       640px  — small / mobile-large
+       900px  — tablet (already the dominant existing value: FleetMap,
+                FleetSkyline3D, PerformanceModel, SiteDigitalTwin, and the
+                Fleet Health cohort-panel grid)
+       1200px — wide desktop */
 }
 
 @media (prefers-color-scheme: dark) {

@@ -101,7 +101,7 @@ onBeforeUnmount(clearTarget)
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  z-index: 35;
+  z-index: var(--z-fab);
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -119,7 +119,7 @@ onBeforeUnmount(clearTarget)
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  z-index: 50;
+  z-index: var(--z-overlay);
   width: min(23rem, calc(100vw - 2rem));
   padding: 1rem;
   color: var(--nav-text-strong);

@@ -441,8 +441,10 @@ watch(
   }
 }
 
-/* Above Leaflet's own panes (400) and controls (800), below the app nav (20
-   on a different stacking context) — see the z-index note in theme.css. */
+/* Above Leaflet's own panes (400) and controls (800). This value only
+   competes with the app-rail (--z-nav, theme.css) if the map's own
+   container fails to establish a stacking context of its own — verify
+   before treating 900 vs. --z-nav as directly comparable. */
 .map-views {
   position: absolute;
   top: 0.5rem;

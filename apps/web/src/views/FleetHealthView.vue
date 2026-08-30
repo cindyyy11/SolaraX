@@ -16,7 +16,13 @@
  *    knowing before a judge finds out.
  */
 import { computed, onMounted, ref } from 'vue'
-import { loadDispatch, formatRinggit, isAssessed } from '@/services/api'
+import {
+  loadDispatch,
+  formatRinggit,
+  isAssessed,
+  sortedTripGroups,
+  cohortCoverage,
+} from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
@@ -105,6 +111,22 @@ const statusSplit = computed(() => {
     .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
 })
 
+/** Screen-reader text for the role="img" split — the legend beside it is visual-only. */
+const splitAriaLabel = computed(
+  () =>
+    `Fleet split by triage status: ${statusSplit.value
+      .map((part) => `${part.label} — ${part.count} sites`)
+      .join(', ')}`,
+)
+
+/** Trip groups ranked by how many sites they cover — see sortedTripGroups. */
+const tripGroups = computed(() => sortedTripGroups(dispatch.value?.fleet_summary.trip_groups ?? []))
+
+/** Per-cohort analysis coverage — see cohortCoverage. */
+const cohortRows = computed(() =>
+  dispatch.value ? cohortCoverage(dispatch.value.cohorts, dispatch.value.sites) : [],
+)
+
 /** Money at risk by site, ranked. Shows how concentrated the exposure is. */
 const riskBySite = computed(() => {
   if (!dispatch.value) return []
@@ -170,7 +192,15 @@ const assumptionRows = computed(() => {
 
 <template>
   <main class="screen">
-    <p v-if="isLoading">Loading…</p>
+    <div v-if="isLoading" class="skeleton" aria-busy="true" aria-live="polite">
+      <span class="sr-only">Loading fleet health…</span>
+      <div class="skeleton__block skeleton__block--header"></div>
+      <div class="skeleton__block skeleton__block--case"></div>
+      <div class="skeleton__row">
+        <div v-for="n in 4" :key="n" class="skeleton__block skeleton__block--tile"></div>
+      </div>
+      <div class="skeleton__block skeleton__block--chart"></div>
+    </div>
 
     <template v-else-if="dispatch && summary && roi && headline">
       <header class="head">
@@ -252,7 +282,7 @@ const assumptionRows = computed(() => {
       <!-- The core claim, drawn: most of the fleet is not visited. -->
       <section class="chart">
         <h2 class="chart__title">Where the fleet sits this month</h2>
-        <div class="split" role="img" aria-label="Fleet split by triage status">
+        <div class="split" role="img" :aria-label="splitAriaLabel">
           <span
             v-for="part in statusSplit"
             :key="part.key"
@@ -281,6 +311,27 @@ const assumptionRows = computed(() => {
         </p>
       </section>
 
+      <!-- Trip groups make "N trips avoided" concrete: which sites, reached together. -->
+      <section v-if="tripGroups.length" class="chart">
+        <h2 class="chart__title">How the fleet groups into visits</h2>
+        <ul class="trips">
+          <li v-for="group in tripGroups" :key="group.trip_id" class="trips__row">
+            <span class="trips__label">{{ group.label }}</span>
+            <span class="trips__chip" :class="{ 'trips__chip--multi': group.site_count > 1 }">
+              {{ group.site_count }} site{{ group.site_count === 1 ? '' : 's' }}, 1 visit
+            </span>
+            <span v-if="group.dispatched" class="trips__tag"
+              >dispatched — not counted as avoided</span
+            >
+          </li>
+        </ul>
+        <p class="chart__note">
+          Sites within {{ assumptions?.same_trip_radius_km }} km are reached in one mobilisation.
+          A group already carrying a dispatched site is not counted as avoided — the technician
+          is going there regardless, so skipping its neighbours saves the drive, not the visit.
+        </p>
+      </section>
+
       <!--
         The annual figure a P&L owner wants, kept honest: setting period_months
         to 1 removed the fabricated six-month history, so the only way to show a
@@ -300,7 +351,12 @@ const assumptionRows = computed(() => {
         <h2 class="chart__title">Money at risk by site</h2>
         <ul class="bars">
           <li v-for="item in riskBySite" :key="item.siteId" class="bars__row">
-            <span class="bars__label">{{ item.name }}</span>
+            <RouterLink
+              :to="{ name: 'site-detail', params: { siteId: item.siteId } }"
+              class="bars__label"
+            >
+              {{ item.name }}
+            </RouterLink>
             <span class="bars__track">
               <span
                 class="bars__fill"
@@ -363,38 +419,75 @@ const assumptionRows = computed(() => {
         {{ roi.co2e_factor_source }}
       </p>
 
-      <!-- Every constant, its value, and where it came from. -->
-      <section class="assumptions">
-        <h2 class="assumptions__title">Assumptions</h2>
-        <p class="assumptions__lead">
-          Read directly from <code>config/assumptions.json</code>, not hardcoded here.
-          {{ assumptions?.tier }}
-        </p>
+      <div class="panels">
+        <!-- Per-cohort analysis coverage — the Scalability claim, shown with real numbers. -->
+        <section v-if="cohortRows.length" class="chart panels__item">
+          <h2 class="chart__title">Cohort coverage</h2>
+          <ul class="cohorts">
+            <li v-for="cohort in cohortRows" :key="cohort.cohortId" class="cohorts__card">
+              <div class="cohorts__head">
+                <span class="cohorts__label">{{ cohort.label }}</span>
+                <DataStatusBadge :status="cohort.dataStatus" small />
+              </div>
+              <p class="cohorts__count">
+                {{ cohort.analysedCount }} of {{ cohort.memberCount }} sites analysed
+              </p>
+              <span
+                class="cohorts__chip"
+                :class="cohort.meetsMinimum ? 'cohorts__chip--good' : 'cohorts__chip--critical'"
+              >
+                {{ cohort.meetsMinimum ? 'meets minimum' : 'below minimum' }}
+              </span>
+              <p v-if="cohort.excludedSites.length" class="cohorts__excluded">
+                Excluded from peer analysis:
+                <span v-for="(site, index) in cohort.excludedSites" :key="site.siteId">
+                  {{ site.name }} ({{ site.reason }})<template
+                    v-if="index < cohort.excludedSites.length - 1"
+                    >, </template
+                  >
+                </span>
+              </p>
+            </li>
+          </ul>
+          <p class="chart__note">
+            Peer benchmarking's accuracy grows with cohort size — a cohort below its minimum
+            member count still runs, but with less statistical confidence.
+          </p>
+        </section>
 
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Constant</th>
-              <th class="table__num">Value</th>
-              <th class="table__num">Range</th>
-              <th>Source / rationale</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in assumptionRows" :key="row.key">
-              <td>
-                <code>{{ row.key }}</code>
-              </td>
-              <td class="table__num">{{ row.value }}</td>
-              <td class="table__num">
-                <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
-                <template v-else>—</template>
-              </td>
-              <td class="table__note">{{ row.note || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+        <!-- Every constant, its value, and where it came from. -->
+        <section class="assumptions panels__item">
+          <h2 class="assumptions__title">Assumptions</h2>
+          <p class="assumptions__lead">
+            Read directly from <code>config/assumptions.json</code>, not hardcoded here.
+            {{ assumptions?.tier }}
+          </p>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Constant</th>
+                <th class="table__num">Value</th>
+                <th class="table__num">Range</th>
+                <th>Source / rationale</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in assumptionRows" :key="row.key">
+                <td>
+                  <code>{{ row.key }}</code>
+                </td>
+                <td class="table__num">{{ row.value }}</td>
+                <td class="table__num">
+                  <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
+                  <template v-else>—</template>
+                </td>
+                <td class="table__note">{{ row.note || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
 
       <footer class="provenance">
         <p>{{ dispatch.meta.data_source }} · {{ dispatch.meta.source_note }}</p>
@@ -408,12 +501,6 @@ const assumptionRows = computed(() => {
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 .head {
   display: flex;
   flex-wrap: wrap;
@@ -613,6 +700,55 @@ const assumptionRows = computed(() => {
   color: var(--text-muted);
 }
 
+.trips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trips__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-hairline);
+  font-size: 0.82rem;
+}
+
+.trips__row:last-child {
+  border-bottom: none;
+}
+
+.trips__label {
+  flex: 1 1 auto;
+  min-width: 10rem;
+  color: var(--text-secondary);
+}
+
+.trips__chip {
+  flex: none;
+  padding: 0.2em 0.6em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hairline);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Multi-site groups are the persuasive case — the same accent already
+   reserved for the two headline "trips avoided / saving" tiles. */
+.trips__chip--multi {
+  border-color: var(--action-fill);
+  color: var(--action-text);
+}
+
+.trips__tag {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
 /* Stacked split. 2px gaps keep adjacent fills legible. */
 .split {
   display: flex;
@@ -704,6 +840,19 @@ const assumptionRows = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.bars__label:hover,
+.bars__label:focus-visible {
+  color: var(--action-text);
+  text-decoration: underline;
+}
+
+.bars__label:focus-visible {
+  outline: 2px solid var(--action-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .bars__track {
@@ -801,11 +950,88 @@ const assumptionRows = computed(() => {
 /* --- Assumptions --- */
 
 .assumptions {
-  margin-top: 2.5rem;
   padding: 1.25rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-md);
+}
+
+/* Cohort coverage sits beside Assumptions at wide viewports; both stack full
+   width below the breakpoint. */
+.panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+@media (min-width: 900px) {
+  .panels {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.panels__item {
+  margin-top: 0;
+}
+
+.cohorts {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.cohorts__card {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--page-plane);
+}
+
+.cohorts__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.cohorts__label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.cohorts__count {
+  margin: 0.35rem 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.cohorts__chip {
+  display: inline-block;
+  padding: 0.15em 0.55em;
+  border-radius: var(--radius-sm);
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.cohorts__chip--good {
+  color: var(--status-good);
+}
+
+.cohorts__chip--critical {
+  color: var(--status-critical);
+}
+
+.cohorts__excluded {
+  margin: 0.5rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .assumptions__title {
@@ -873,5 +1099,77 @@ code {
 
 .provenance p {
   margin: 0 0 0.2rem;
+}
+
+/* --- Loading skeleton --- */
+
+.skeleton {
+  padding-top: 1.5rem;
+}
+
+.skeleton__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  margin-top: 1.5rem;
+}
+
+.skeleton__block {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    100deg,
+    var(--page-plane) 40%,
+    var(--border-hairline) 50%,
+    var(--page-plane) 60%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton__block--header {
+  height: 3.5rem;
+  max-width: 26rem;
+}
+
+.skeleton__block--case {
+  height: 3.25rem;
+  margin-top: 1.25rem;
+}
+
+.skeleton__block--tile {
+  height: 4.5rem;
+}
+
+.skeleton__block--chart {
+  height: 10rem;
+  margin-top: 1.75rem;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__block {
+    animation: none;
+    background: var(--page-plane);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

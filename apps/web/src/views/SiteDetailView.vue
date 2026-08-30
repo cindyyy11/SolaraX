@@ -34,6 +34,7 @@ import VisionEvidence from '@/components/VisionEvidence.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
 import PerformanceModel from '@/components/PerformanceModel.vue'
 import SiteComparison from '@/components/SiteComparison.vue'
+import SpatialOperations from '@/components/SpatialOperations.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -41,7 +42,6 @@ const isLoading = ref(true)
 
 /** Whether an M5 vision service is reachable from wherever this is served. */
 const visionAvailable = isVisionApiConfigured()
-
 onMounted(async () => {
   const result = await loadDispatch()
   dispatch.value = result.dispatch
@@ -82,7 +82,7 @@ const cohort = computed(() => {
           <RouterLink
             v-if="site.hypothesis"
             :to="`/site/${site.site_id}/work-order`"
-            class="work-order-link"
+            class="btn-primary"
           >
             Generate work order
             <ArrowRight :size="15" aria-hidden="true" />
@@ -124,6 +124,7 @@ const cohort = computed(() => {
       </NoticeCallout>
 
       <PerformanceModel :site="site" />
+      <SpatialOperations :site="site" />
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->
@@ -222,12 +223,6 @@ const cohort = computed(() => {
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 .back {
   display: inline-flex;
   align-items: center;
@@ -281,38 +276,6 @@ const cohort = computed(() => {
  * theme.css's --action-fill / --action-ink pairing: this is the role brand
  * color exists to play, used exactly once per screen.
  */
-.work-order-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.work-order-link:hover {
-  background: var(--action-fill-hover);
-}
-
-.work-order-link:active {
-  transform: scale(0.97);
-}
-
-.work-order-link svg {
-  transition: transform var(--duration-fast) var(--ease-out);
-}
-
-.work-order-link:hover svg {
-  transform: translateX(2px);
-}
 
 .block {
   margin: 1.5rem 0;
@@ -460,4 +423,5 @@ const cohort = computed(() => {
 .caution {
   margin: 1rem 0 0;
 }
+
 </style>

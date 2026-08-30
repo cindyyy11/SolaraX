@@ -141,7 +141,7 @@ function iconFor(status: SiteStatus) {
 </script>
 
 <template>
-  <main id="main-content" class="command" tabindex="-1">
+  <main id="main-content" class="command screen screen--wide" tabindex="-1">
     <section v-if="isLoading" class="load-state" aria-live="polite">
       <span class="load-state__pulse"></span>
       <div>
@@ -174,7 +174,7 @@ function iconFor(status: SiteStatus) {
             ><span></span> Pipeline {{ meta.pipeline_version }} ·
             {{ meta.data_status.toLowerCase() }}</span
           >
-          <button type="button" class="primary-action" @click="reviewPriorities">
+          <button type="button" class="btn-primary" @click="reviewPriorities">
             Review priorities <ArrowUpRight :size="17" aria-hidden="true" />
           </button>
         </div>
@@ -411,9 +411,6 @@ function iconFor(status: SiteStatus) {
 
 <style scoped>
 .command {
-  width: min(100%, 1600px);
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
   outline: none;
 }
 .load-state {
@@ -507,27 +504,6 @@ function iconFor(status: SiteStatus) {
   height: 7px;
   border-radius: 50%;
   background: var(--signal-live);
-}
-.primary-action {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 0.55rem;
-  padding: 0 1.15rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border: 0;
-  border-radius: var(--radius-md);
-  font: 700 0.83rem var(--font-display);
-  cursor: pointer;
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--action-fill) 20%, transparent);
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform 120ms var(--ease-out);
-}
-.primary-action:active {
-  transform: scale(0.97);
 }
 .notice {
   margin-top: 1rem;
@@ -960,7 +936,7 @@ function iconFor(status: SiteStatus) {
     order: 2;
     flex-wrap: wrap;
   }
-  .primary-action {
+  .btn-primary {
     width: 100%;
   }
   .signal-strip {
@@ -1031,9 +1007,6 @@ function iconFor(status: SiteStatus) {
 @media (prefers-reduced-motion: reduce) {
   .load-state__pulse {
     animation: fade 200ms var(--ease-out) infinite alternate;
-  }
-  .primary-action:active {
-    transform: none;
   }
 }
 </style>
