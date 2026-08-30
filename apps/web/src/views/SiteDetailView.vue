@@ -135,8 +135,15 @@ const cohort = computed(() => {
       </NoticeCallout>
 
       <PerformanceModel :site="site" />
-      <ScenarioLab :site="site" @change="updateScenario" />
-      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-id="scenarioId" :scenario-label="scenarioLabel" />
+      <section class="spatial-operations" aria-labelledby="spatial-operations-title">
+        <div class="spatial-operations__intro">
+          <p class="spatial-operations__eyebrow">SPATIAL OPERATIONS</p>
+          <h2 id="spatial-operations-title">Test a condition, then see the site respond</h2>
+          <p>Scenario outputs are simulated projections; measured fleet evidence remains unchanged.</p>
+        </div>
+        <ScenarioLab :site="site" @change="updateScenario" />
+        <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-id="scenarioId" :scenario-label="scenarioLabel" />
+      </section>
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->
@@ -435,4 +442,11 @@ const cohort = computed(() => {
 .caution {
   margin: 1rem 0 0;
 }
+
+.spatial-operations { margin-top: 1.5rem; }
+.spatial-operations__intro { padding: 0 .15rem .15rem; }
+.spatial-operations__eyebrow { margin: 0 0 .3rem; color: var(--action-text); font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
+.spatial-operations__intro h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.25rem, 2.4vw, 1.75rem); letter-spacing: -.035em; }
+.spatial-operations__intro > p:last-child { margin: .35rem 0 0; color: var(--text-secondary); font-size: .8rem; }
+.spatial-operations :deep(.lab), .spatial-operations :deep(.twin) { margin-top: 1rem; }
 </style>
