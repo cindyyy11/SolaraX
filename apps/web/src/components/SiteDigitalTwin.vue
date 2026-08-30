@@ -75,6 +75,7 @@ onBeforeUnmount(stopReplay)
           An illustrative solar-array and drone inspection scene. Geometry and anomaly locations
           are not derived from this site's physical layout.
         </p>
+        <p v-if="scenarioLabel" class="twin__active-scenario">Scenario overlay: <strong>{{ scenarioLabel }}</strong> · simulated only</p>
       </div>
       <button v-if="!isPlaying" type="button" class="replay" @click="replay">
         <Play :size="16" aria-hidden="true" /> Replay incident
@@ -198,6 +199,8 @@ onBeforeUnmount(stopReplay)
 .twin__title-row { display: flex; align-items: center; gap: .55rem; }
 .twin h2 { margin: 0; font-size: 1.05rem; letter-spacing: -.02em; }
 .twin__header p { max-width: 70ch; margin: .4rem 0 0; color: #aebdb8; font-size: .78rem; line-height: 1.5; }
+.twin__active-scenario { color: #efb866 !important; }
+.twin__active-scenario strong { color: #fff; }
 .simulation-label { padding: .18rem .42rem; color: #182c25; background: #7be0a5; border-radius: var(--radius-sm); font-size: .61rem; font-weight: 800; letter-spacing: .08em; }
 .replay { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; padding: .65rem .85rem; border: 0; border-radius: var(--radius-sm); color: #192c4c; background: var(--brand-solar); font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; white-space: nowrap; transition: transform var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
 .replay--stop { color: #f4f7f6; background: #34443f; }

@@ -133,8 +133,8 @@ const cohort = computed(() => {
       </NoticeCallout>
 
       <PerformanceModel :site="site" />
-      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-label="scenarioLabel" />
       <ScenarioLab :site="site" @change="updateScenario" />
+      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-label="scenarioLabel" />
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->
