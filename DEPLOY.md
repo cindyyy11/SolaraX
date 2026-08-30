@@ -25,14 +25,15 @@ Takes about thirty seconds. Nothing else in this file matters until it is done.
 
 ## Deploying the frontend to Vercel
 
-The app lives in `apps/web`, not at the repo root, so `vercel.json` at the root does the redirection.
-You should not need to set a Root Directory in the Vercel dashboard.
+The app lives in `apps/web`. Set **Root Directory** to `apps/web` in the Vercel dashboard;
+the root `vercel.json` commands are evaluated from that directory.
 
 1. Sign in to [vercel.com](https://vercel.com) with the GitHub account that owns the repo.
 2. **Add New → Project**, import `SolaraX`.
 3. Leave every build setting on its default. `vercel.json` overrides them:
-   - Build: `cd apps/web && npm ci && npm run build`
-   - Output: `apps/web/dist`
+   - Install: `npm ci`
+   - Build: `npm run build`
+   - Output: `dist`
    - Framework preset: none (Vite is driven through the build command)
 4. **Environment variables — leave them empty.** See the note on the vision service below.
 5. Deploy. First build takes about a minute.
