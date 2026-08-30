@@ -6,13 +6,13 @@ import { runScenario, scenarioDefinitions } from '@/services/scenarioEngine'
 import type { ScenarioResult } from '@/types/scenario'
 
 const props = defineProps<{ site: Site }>()
-const emit = defineEmits<{ change: [{ label: string; result: ScenarioResult }] }>()
+const emit = defineEmits<{ change: [{ id: string; label: string; result: ScenarioResult }] }>()
 const selectedId = ref(scenarioDefinitions[0]!.id)
 const severity = ref(scenarioDefinitions[0]!.parameters[0]!.defaultValue)
 const duration = ref(scenarioDefinitions[0]!.parameters[1]!.defaultValue)
 const scenario = computed(() => scenarioDefinitions.find((item) => item.id === selectedId.value) ?? scenarioDefinitions[0]!)
 const output = computed(() => runScenario(props.site, scenario.value, { severity: severity.value, duration: duration.value }))
-watch(output, (result) => emit('change', { label: scenario.value.title, result }), { immediate: true })
+watch(output, (result) => emit('change', { id: scenario.value.id, label: scenario.value.title, result }), { immediate: true })
 
 function selectScenario() {
   severity.value = scenario.value.parameters[0]!.defaultValue

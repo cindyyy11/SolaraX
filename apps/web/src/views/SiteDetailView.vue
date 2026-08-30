@@ -46,7 +46,9 @@ const isLoading = ref(true)
 const visionAvailable = isVisionApiConfigured()
 const scenarioResult = ref<ScenarioResult | undefined>()
 const scenarioLabel = ref('')
-function updateScenario(payload: { label: string; result: ScenarioResult }) {
+const scenarioId = ref('')
+function updateScenario(payload: { id: string; label: string; result: ScenarioResult }) {
+  scenarioId.value = payload.id
   scenarioLabel.value = payload.label
   scenarioResult.value = payload.result
 }
@@ -134,7 +136,7 @@ const cohort = computed(() => {
 
       <PerformanceModel :site="site" />
       <ScenarioLab :site="site" @change="updateScenario" />
-      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-label="scenarioLabel" />
+      <SiteDigitalTwin :site="site" :scenario="scenarioResult" :scenario-id="scenarioId" :scenario-label="scenarioLabel" />
       <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->

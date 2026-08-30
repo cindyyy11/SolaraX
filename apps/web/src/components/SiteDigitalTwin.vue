@@ -4,7 +4,7 @@ import { Box, Camera, CircleStop, Play, RotateCcw, ScanLine } from '@lucide/vue'
 import type { Site } from '@/types/dispatch'
 import type { ScenarioResult } from '@/types/scenario'
 
-const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string }>()
+const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string; scenarioId?: string }>()
 
 type CameraPreset = 'overview' | 'roof' | 'anomaly' | 'drone'
 
@@ -104,7 +104,7 @@ onBeforeUnmount(stopReplay)
           </button>
         </div>
 
-        <div class="scene-viewport" :class="`camera--${activeCamera}`">
+        <div class="scene-viewport" :class="[`camera--${activeCamera}`, scenario?.affectedLayer ? `layer--${scenario.affectedLayer}` : '', scenarioId ? `scenario--${scenarioId}` : '']">
           <div class="sky-glow" aria-hidden="true"></div>
           <div class="world" aria-hidden="true">
             <div class="roof">
@@ -133,7 +133,7 @@ onBeforeUnmount(stopReplay)
           </div>
 
           <div class="scene-readout">
-            <span>Illustrative model</span>
+            <span>{{ scenario ? 'Scenario projection' : 'Illustrative model' }}</span>
             <strong>{{ site.name }}</strong>
             <small>{{ site.capacity_kwp.toLocaleString() }} kWp · {{ site.status }}</small>
             <small v-if="scenarioLabel && scenario" class="scene-readout__scenario">{{ scenarioLabel }} · {{ scenario.responseLabel }}</small>
@@ -225,6 +225,11 @@ onBeforeUnmount(stopReplay)
 .panel-cell i { position: absolute; inset-block: 0; width: 1px; background: rgba(188, 224, 229, .27); }
 .panel-cell i:nth-child(1) { left: 25%; } .panel-cell i:nth-child(2) { left: 50%; } .panel-cell i:nth-child(3) { left: 75%; }
 .panel-cell--scanned { filter: brightness(1.12); }
+.layer--equipment .panel-cell { filter: saturate(.65) brightness(.82); }
+.layer--grid .panel-cell { filter: hue-rotate(18deg) saturate(.78); }
+.scenario--partial-shading .panel-cell:nth-child(-n+8), .scenario--soiling .panel-cell { filter: brightness(.62) saturate(.55); }
+.scenario--thermal-hotspot .panel-cell:nth-child(15), .scenario--storm-damage .panel-cell:nth-child(15) { animation: anomaly-pulse 1.4s ease-in-out infinite; }
+@keyframes anomaly-pulse { 50% { filter: brightness(1.45) saturate(1.35); box-shadow: 0 0 24px rgba(255, 104, 79, .65); } }
 .panel-cell--anomaly { background: linear-gradient(135deg, #8b332c, #421915); border-color: #ff8775; box-shadow: 0 0 18px rgba(255, 104, 79, .38); }
 .inverter { position: absolute; right: 1.5%; width: 6%; height: 16%; transform: translateZ(12px); display: grid; place-items: center; color: #dce5e1; background: #66726f; border: 1px solid #9da8a4; font-size: .43rem; }
 .inverter--one { top: 24%; } .inverter--two { top: 60%; }
