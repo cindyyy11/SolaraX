@@ -26,6 +26,7 @@ import {
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
+import InterventionOptimizer from '@/components/InterventionOptimizer.vue'
 
 const dispatch = ref<Dispatch | null>(null)
 const isLoading = ref(true)
@@ -278,6 +279,8 @@ const assumptionRows = computed(() => {
           <p class="tile__label">tCO₂e recoverable</p>
         </div>
       </section>
+
+      <InterventionOptimizer :dispatch="dispatch" />
 
       <!-- The core claim, drawn: most of the fleet is not visited. -->
       <section class="chart">

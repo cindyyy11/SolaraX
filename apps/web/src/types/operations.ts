@@ -52,3 +52,20 @@ export interface RecoveryResult {
 }
 
 export type ResilienceCategory = 'generation' | 'equipment' | 'weather' | 'grid' | 'telemetry' | 'communications'
+
+export interface InterventionCandidate {
+  siteId: string
+  siteName: string
+  recoverableRm: number
+  confidence: number
+  safetyUrgency: number
+  travelEffort: number
+  travelEvidenceLevel: EvidenceLevel
+}
+
+export interface InterventionRecommendation extends InterventionCandidate {
+  score: number
+  rank: number
+  decision: 'dispatch-now' | 'monitor'
+  reasons: string[]
+}
