@@ -90,7 +90,7 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
 </script>
 
 <template>
-  <section class="sub">
+  <section class="sub card card--interactive">
     <header class="sub__head">
       <h2 class="sub__heading">
         Inverter breakdown
@@ -220,9 +220,6 @@ const twoUnitCaveat = computed(() => props.subSite.unit_count === 2)
 <style scoped>
 .sub {
   padding: 1.25rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
 }
 
 .sub__head {

@@ -248,7 +248,7 @@ watch(() => props.rows, render, { deep: false })
 </script>
 
 <template>
-  <figure class="cohort">
+  <figure class="cohort card card--interactive">
     <figcaption class="cohort__caption">
       Daily specific yield against cohort peers — normalised to kWh per kWp so sites of any
       size compare honestly.
@@ -264,9 +264,6 @@ watch(() => props.rows, render, { deep: false })
 .cohort {
   margin: 0;
   padding: 1rem 1rem 0.75rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
 }
 
 .cohort__caption {

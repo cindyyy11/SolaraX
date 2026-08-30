@@ -115,7 +115,7 @@ onBeforeUnmount(clearPreview)
 </script>
 
 <template>
-  <section class="vision">
+  <section class="vision card card--interactive">
     <div class="vision__heading">
       <div><h2 class="vision__title">Does this image support dispatch?</h2><p>Computer vision evidence · {{ props.siteName }}</p></div>
       <span>HUMAN REVIEW REQUIRED</span>
@@ -202,9 +202,6 @@ onBeforeUnmount(clearPreview)
 <style scoped>
 .vision {
   padding: 1.25rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
 }
 
 .vision__title {
