@@ -93,7 +93,7 @@ const cohort = computed(() => {
           <RouterLink
             v-if="site.hypothesis"
             :to="`/site/${site.site_id}/work-order`"
-            class="work-order-link"
+            class="btn-primary"
           >
             Generate work order
             <ArrowRight :size="15" aria-hidden="true" />
@@ -235,12 +235,6 @@ const cohort = computed(() => {
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 .back {
   display: inline-flex;
   align-items: center;
@@ -294,38 +288,6 @@ const cohort = computed(() => {
  * theme.css's --action-fill / --action-ink pairing: this is the role brand
  * color exists to play, used exactly once per screen.
  */
-.work-order-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.work-order-link:hover {
-  background: var(--action-fill-hover);
-}
-
-.work-order-link:active {
-  transform: scale(0.97);
-}
-
-.work-order-link svg {
-  transition: transform var(--duration-fast) var(--ease-out);
-}
-
-.work-order-link:hover svg {
-  transform: translateX(2px);
-}
 
 .block {
   margin: 1.5rem 0;
