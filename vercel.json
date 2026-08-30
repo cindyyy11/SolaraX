@@ -6,6 +6,12 @@
   "installCommand": "npm ci",
   "framework": null,
 
+  "build": {
+    "env": {
+      "VITE_VISION_API_URL": "https://wenhuiiiiiii-solarax-vision.hf.space"
+    }
+  },
+
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],

@@ -71,19 +71,18 @@ The M5 upload panel on Screen 2 posts an image to a FastAPI service. That servic
   because a Gradio-SDK Space can't `git clone` this repo or import `pipeline.`). Keep it in sync
   with `pipeline/vision_api.py` + `pipeline/defect_classifier.py` by hand.
 
-To switch the panel **on** for the deployed dashboard:
-
-1. Vercel → SolaraX project → Settings → Environment Variables →
-   `VITE_VISION_API_URL` = `https://wenhuiiiiiii-solarax-vision.hf.space` (Production, no trailing slash)
-2. Redeploy (Vite inlines env vars at build time — a restart is not enough)
+The panel is switched **on** by `build.env.VITE_VISION_API_URL` in the root `vercel.json` — committed,
+so it takes effect on the next Vercel build of `main` with no dashboard access needed. A dashboard
+environment variable of the same name would override it if one is ever set.
 
 CORS: `app.py` allows `solara-x-inky.vercel.app` and `*.vercel.app` previews by default; override
 with the `VISION_ALLOWED_ORIGINS` Space variable if the domain changes.
 
-**Behaviour without the env var:** the panel stays hidden in production builds and the rest of
-Screen 2 renders normally. `npm run dev` still defaults to `http://127.0.0.1:8000` for local M5 work.
-Do **not** point it at a `http://127.0.0.1:8000`-style address in a deployed build — an HTTPS page
-cannot call a plaintext localhost endpoint (mixed content), and it fails for every visitor.
+**If `VITE_VISION_API_URL` is ever unset** (removed from `vercel.json` and not in the dashboard):
+the panel stays hidden in production builds and the rest of Screen 2 renders normally. `npm run dev`
+still defaults to `http://127.0.0.1:8000` for local M5 work. Do **not** point it at a
+`http://127.0.0.1:8000`-style address in a deployed build — an HTTPS page cannot call a plaintext
+localhost endpoint (mixed content), and it fails for every visitor.
 
 **Cold start:** a free Space sleeps after 48h idle and takes ~40s to wake. Hit `/health` a few
 minutes before any demo or judging window. ZeroGPU also has a daily free-usage quota.
