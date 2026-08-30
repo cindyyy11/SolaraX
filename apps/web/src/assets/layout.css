@@ -1,0 +1,67 @@
+/**
+ * SolaraX shared layout primitives — unscoped, loaded once in main.ts next
+ * to theme.css/fonts.css, the same way those already work. Vue's
+ * <style scoped> can't share a rule across components, so anything used
+ * identically by more than one view belongs here instead of being
+ * re-declared per file. Two primitives live here because they're the two
+ * patterns Tier 1's audit found duplicated 3-4x across the app: the page
+ * container shell, and the primary call-to-action button.
+ */
+
+/* Shared page-shell container. Three of four screens declared this exact
+   rule verbatim before this pass; the fourth (Dispatch) differed only in
+   using width:min() and carrying an unrelated outline:none for its own use
+   as a focus target, which stays local to that view. */
+.screen {
+  max-width: var(--container-standard);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
+}
+.screen--wide {
+  max-width: var(--container-wide);
+}
+.screen--narrow {
+  max-width: var(--container-narrow);
+}
+
+/* Unified primary CTA. Combines the best-of-three from three previously
+   separate treatments: DispatchView's glow shadow + press-scale (the most
+   polished of the three) with the icon-translate-on-hover from Site
+   Detail's work-order link and Work Order's print/save buttons. */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1.15rem;
+  background: var(--action-fill);
+  color: var(--action-ink);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: 700 0.83rem var(--font-display);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--action-fill) 20%, transparent);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.btn-primary:hover {
+  background: var(--action-fill-hover);
+}
+.btn-primary:active {
+  transform: scale(0.97);
+}
+.btn-primary svg {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.btn-primary:hover svg {
+  transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:active {
+    transform: none;
+  }
+}
