@@ -62,7 +62,7 @@ const rows = computed(() => {
 </script>
 
 <template>
-  <section v-if="peer" class="compare" aria-labelledby="site-comparison-title">
+  <section v-if="peer" class="compare card card--interactive" aria-labelledby="site-comparison-title">
     <header>
       <div>
         <h2 id="site-comparison-title">Compare with another fleet site</h2>
@@ -94,12 +94,7 @@ const rows = computed(() => {
 
 <style scoped>
 .compare {
-  margin: 1.5rem 0;
   padding: 1.1rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elevation-1);
 }
 .compare header {
   display: flex;
