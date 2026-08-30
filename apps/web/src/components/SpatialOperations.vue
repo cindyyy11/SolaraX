@@ -1,21 +1,31 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Site } from '@/types/dispatch'
 import type { ScenarioResult } from '@/types/scenario'
 import ScenarioLab from '@/components/ScenarioLab.vue'
 import SiteDigitalTwin from '@/components/SiteDigitalTwin.vue'
+import { inspectionRouteFor } from '@/services/inspectionRoutes'
+import type { InspectionMode } from '@/types/inspection'
 
 defineProps<{ site: Site }>()
 
 const scenarioResult = ref<ScenarioResult>()
 const scenarioId = ref('')
 const scenarioLabel = ref('')
+const severity = ref(50)
+const mode = ref<InspectionMode>('guided')
+const activeWaypoint = ref(0)
+const route = computed(() => inspectionRouteFor(scenarioId.value))
 
-function updateScenario(payload: { id: string; label: string; result: ScenarioResult }) {
+function updateScenario(payload: { id: string; label: string; severity: number; duration: number; result: ScenarioResult }) {
+  if (scenarioId.value !== payload.id) activeWaypoint.value = 0
   scenarioId.value = payload.id
   scenarioLabel.value = payload.label
+  severity.value = payload.severity
   scenarioResult.value = payload.result
 }
+
+function selectWaypoint(index: number) { activeWaypoint.value = index; mode.value = 'guided' }
 </script>
 
 <template>
@@ -33,13 +43,27 @@ function updateScenario(payload: { id: string; label: string; result: ScenarioRe
         <ScenarioLab :site="site" embedded @change="updateScenario" />
       </aside>
       <div class="spatial__scene">
+        <div class="spatial__routebar">
+          <div><strong>{{ route.label }}</strong><span>{{ route.waypoints[activeWaypoint]?.instruction }}</span></div>
+          <div class="spatial__modes" aria-label="Inspection mode">
+            <button type="button" :class="{ active: mode === 'guided' }" :aria-pressed="mode === 'guided'" @click="mode = 'guided'">Guided</button>
+            <button type="button" :class="{ active: mode === 'explore' }" :aria-pressed="mode === 'explore'" @click="mode = 'explore'">Explore</button>
+          </div>
+        </div>
         <SiteDigitalTwin
           :site="site"
           :scenario="scenarioResult"
           :scenario-id="scenarioId"
           :scenario-label="scenarioLabel"
+          :route="route"
+          :inspection-mode="mode"
+          :active-waypoint="activeWaypoint"
+          :severity="severity"
           embedded
         />
+        <ol class="spatial__waypoints" aria-label="Inspection points">
+          <li v-for="(point, index) in route.waypoints" :key="point.id"><button type="button" :class="{ active: activeWaypoint === index }" :aria-current="activeWaypoint === index ? 'step' : undefined" @click="selectWaypoint(index)"><span>{{ index + 1 }}</span><strong>{{ point.label }}</strong></button></li>
+        </ol>
       </div>
     </div>
   </section>
@@ -57,6 +81,12 @@ function updateScenario(payload: { id: string; label: string; result: ScenarioRe
 .spatial__workspace { display:grid; grid-template-columns:minmax(290px,340px) minmax(0,1fr); align-items:stretch; }
 .spatial__controls { min-width:0; border-right:1px solid var(--border-hairline); }
 .spatial__scene { min-width:0; background:#0d1715; }
+.spatial__routebar { min-height:68px; display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem 1rem; color:#f4f7f6; background:#0a1311; border-bottom:1px solid rgba(255,255,255,.09); }
+.spatial__routebar strong,.spatial__routebar span { display:block; } .spatial__routebar strong { font-size:.78rem; } .spatial__routebar span { max-width:62ch; margin-top:.2rem; color:#9fb0aa; font-size:.65rem; line-height:1.4; }
+.spatial__modes { display:flex; gap:.25rem; flex:0 0 auto; } .spatial__modes button { min-height:38px; padding:.45rem .65rem; color:#9fb0aa; background:transparent; border:1px solid rgba(255,255,255,.1); border-radius:var(--radius-sm); font:inherit; font-size:.68rem; cursor:pointer; } .spatial__modes button.active { color:#172921; background:#7be0a5; border-color:#7be0a5; }
+.spatial__waypoints { display:flex; gap:.35rem; margin:0; padding:.65rem 1rem .85rem; overflow-x:auto; list-style:none; color:#fff; background:#0d1715; }
+.spatial__waypoints button { min-height:44px; display:flex; align-items:center; gap:.45rem; padding:.5rem .65rem; color:#aebdb8; background:#14231f; border:1px solid rgba(255,255,255,.09); border-radius:var(--radius-sm); font:inherit; cursor:pointer; white-space:nowrap; }
+.spatial__waypoints button span { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#263a34; font-size:.62rem; } .spatial__waypoints button strong { font-size:.68rem; } .spatial__waypoints button.active { color:#fff; border-color:rgba(123,224,165,.55); background:#1a3029; } .spatial__waypoints button.active span { color:#172921; background:#7be0a5; }
 @media (max-width:1050px) { .spatial__workspace { grid-template-columns:1fr; } .spatial__controls { border-right:0; border-bottom:1px solid var(--border-hairline); } }
 @media (max-width:620px) { .spatial__header { align-items:flex-start; flex-direction:column; gap:.75rem; } .spatial__state { width:100%; } }
 </style>

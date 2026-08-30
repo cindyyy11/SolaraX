@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
 import { Box, Camera, CircleStop, Play, RotateCcw, ScanLine } from '@lucide/vue'
 import type { Site } from '@/types/dispatch'
 import type { ScenarioResult } from '@/types/scenario'
+import type { InspectionMode, InspectionRoute } from '@/types/inspection'
 
-const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string; scenarioId?: string; embedded?: boolean }>()
+const SiteWebGLScene = defineAsyncComponent(() => import('@/components/SiteWebGLScene.vue'))
+const props = defineProps<{ site: Site; scenario?: ScenarioResult; scenarioLabel?: string; scenarioId?: string; embedded?: boolean; route?: InspectionRoute; inspectionMode?: InspectionMode; activeWaypoint?: number; severity?: number }>()
 
 type CameraPreset = 'overview' | 'roof' | 'anomaly' | 'drone'
 
@@ -123,6 +125,7 @@ onBeforeUnmount(() => { stopReplay(); if (transitionTimer) clearTimeout(transiti
           <div class="sky-glow" aria-hidden="true"></div>
           <div class="scenario-atmosphere" aria-hidden="true"></div>
           <div v-if="isScenarioChanging" class="scenario-transition" role="status">Applying {{ scenarioLabel }}…</div>
+          <SiteWebGLScene v-if="route" :route="route" :mode="inspectionMode ?? 'guided'" :active-waypoint="activeWaypoint ?? 0" :severity="severity ?? 50" />
           <div class="world" aria-hidden="true">
             <div class="roof">
               <div class="roof-grid"></div>
