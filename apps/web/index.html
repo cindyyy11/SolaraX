@@ -1,10 +1,41 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="en">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vite App</title>
+
+    <title>SolaraX — Fleet Yield Assurance</title>
+    <meta name="description" content="SolaraX tells a solar asset owner which sites in their distributed fleet need a maintenance visit this month, and which don't.">
+    <meta name="theme-color" content="#192C4C">
+
+    <!-- SVG first for crisp scaling; the ICO carries 16-256px for older browsers. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="SolaraX — Fleet Yield Assurance">
+    <meta property="og:description" content="Which sites in your fleet need a visit this month, and which don't. Peer benchmarking across a solar fleet, with no on-site sensors.">
+    <meta property="og:image" content="/brand/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!--
+      Stamp the stored theme BEFORE first paint.
+
+      This is inline and blocking on purpose. Doing it from Vue would run after
+      the first paint, so a viewer who chose dark would get a white flash on
+      every navigation — the one bug a theme toggle is judged on. Absent or
+      unreadable storage falls through to no attribute, which is what
+      theme.css treats as "follow the system".
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem('solarax:theme')
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
+      } catch (e) {
+        /* Private mode or blocked storage — follow the system. */
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>

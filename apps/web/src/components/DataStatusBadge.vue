@@ -9,6 +9,7 @@
  * "this site needs a visit" with "this number is scaffolding".
  */
 import { computed } from 'vue'
+import { CircleCheck, CircleDashed, CircleOff } from '@lucide/vue'
 import type { DataStatus } from '@/types/dispatch'
 
 const props = withDefaults(
@@ -27,6 +28,17 @@ const EXPLANATIONS: Record<DataStatus, string> = {
 }
 
 const title = computed(() => `${props.status} — ${EXPLANATIONS[props.status]}`)
+
+/**
+ * Filled / dashed / off — three distinct silhouettes reinforcing "fully real",
+ * "real method, synthetic input" and "must not survive to submission" without
+ * relying on the reader distinguishing three shades of a filled dot.
+ */
+const GLYPH = {
+  BUILT: CircleCheck,
+  SIMULATED: CircleDashed,
+  PLACEHOLDER: CircleOff,
+} as const
 </script>
 
 <template>
@@ -35,9 +47,7 @@ const title = computed(() => `${props.status} — ${EXPLANATIONS[props.status]}`
     :class="[`badge--${status.toLowerCase()}`, { 'badge--small': small }]"
     :title="title"
   >
-    <span class="badge__glyph" aria-hidden="true">
-      {{ status === 'BUILT' ? '●' : status === 'SIMULATED' ? '◐' : '○' }}
-    </span>
+    <component :is="GLYPH[status]" class="badge__glyph" :size="small ? 11 : 13" aria-hidden="true" />
     <span class="badge__text">{{ status }}</span>
   </span>
 </template>
@@ -63,7 +73,7 @@ const title = computed(() => `${props.status} — ${EXPLANATIONS[props.status]}`
 }
 
 .badge__glyph {
-  font-size: 0.85em;
+  flex: none;
 }
 
 /* Color is a reinforcement here — the text label always carries the meaning. */

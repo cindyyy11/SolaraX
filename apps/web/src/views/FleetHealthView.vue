@@ -16,9 +16,10 @@
  *    knowing before a judge finds out.
  */
 import { computed, onMounted, ref } from 'vue'
-import { loadDispatch, formatRinggit } from '@/services/api'
+import { loadDispatch, formatRinggit, isAssessed } from '@/services/api'
 import type { Dispatch } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
+import NoticeCallout from '@/components/NoticeCallout.vue'
 
 const dispatch = ref<Dispatch | null>(null)
 const isLoading = ref(true)
@@ -74,15 +75,34 @@ const headline = computed(() => {
   }
 })
 
-/** The fleet split — the product's central claim, drawn rather than stated. */
+/**
+ * The fleet split — the product's central claim, drawn rather than stated.
+ *
+ * Counted from the sites array rather than read from fleet_summary, because
+ * summary.healthy_count includes sites the detector never ruled on. The frozen
+ * schema cannot express a fourth status (validator rule 4 asserts the three
+ * counts sum to site_count), so the separation is made here — the same split
+ * Screen 1 draws, so the two screens agree. See isAssessed in services/api.ts.
+ */
 const statusSplit = computed(() => {
-  if (!summary.value) return []
+  if (!summary.value || !dispatch.value) return []
   const total = summary.value.site_count || 1
+  const sites = dispatch.value.sites
+  const assessedWith = (status: string) =>
+    sites.filter((site) => site.status === status && isAssessed(site)).length
+
   return [
-    { key: 'dispatch', label: 'Dispatch', count: summary.value.dispatch_count },
-    { key: 'monitor', label: 'Monitor', count: summary.value.monitor_count },
-    { key: 'healthy', label: 'Healthy', count: summary.value.healthy_count },
-  ].map((part) => ({ ...part, percent: (part.count / total) * 100 }))
+    { key: 'dispatch', label: 'Dispatch', count: assessedWith('dispatch') },
+    { key: 'monitor', label: 'Monitor', count: assessedWith('monitor') },
+    { key: 'healthy', label: 'Healthy', count: assessedWith('healthy') },
+    {
+      key: 'not_assessed',
+      label: 'Not assessed',
+      count: sites.filter((s) => !isAssessed(s)).length,
+    },
+  ]
+    .filter((part) => part.key !== 'not_assessed' || part.count > 0)
+    .map((part) => ({ ...part, percent: (part.count / total) * 100 }))
 })
 
 /** Money at risk by site, ranked. Shows how concentrated the exposure is. */
@@ -111,7 +131,8 @@ const caseComparison = computed(() => {
   if (!base || !sum) return null
 
   const midSaving = sum.trips_avoided * base.cost_per_visit_rm
-  const lowSaving = sum.trips_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
+  const lowSaving =
+    sum.trips_avoided * (base.cost_per_visit_rm_range?.low ?? base.cost_per_visit_rm)
   const kwhAtRisk = sum.total_rm_at_risk / base.tariff_rm_per_kwh
   const midRisk = kwhAtRisk * base.tariff_rm_per_kwh
   const lowRisk = kwhAtRisk * (base.tariff_rm_per_kwh_range?.low ?? base.tariff_rm_per_kwh)
@@ -141,10 +162,8 @@ const assumptionRows = computed(() => {
       key,
       value: value as number | string,
       note: notes[key] ?? '',
-      range:
-        (base as Record<string, unknown>)[`${key}_range`] as
-          | { low: number; high: number }
-          | undefined,
+      range: (base as Record<string, unknown>)[`${key}_range`] as
+        { low: number; high: number } | undefined,
     }))
 })
 </script>
@@ -156,8 +175,8 @@ const assumptionRows = computed(() => {
     <template v-else-if="dispatch && summary && roi && headline">
       <header class="head">
         <div>
-          <p class="head__eyebrow">Fleet health &amp; ROI</p>
-          <h1 class="head__title">{{ dispatch.meta.reporting_month_label }}</h1>
+          <h1 class="head__title">Fleet health &amp; ROI</h1>
+          <p class="head__month">{{ dispatch.meta.reporting_month_label }}</p>
         </div>
         <div class="head__right">
           <DataStatusBadge :status="roi.data_status" />
@@ -247,7 +266,11 @@ const assumptionRows = computed(() => {
         </div>
         <ul class="split__legend">
           <li v-for="part in statusSplit" :key="part.key">
-            <span class="split__swatch" :class="`split__swatch--${part.key}`" aria-hidden="true"></span>
+            <span
+              class="split__swatch"
+              :class="`split__swatch--${part.key}`"
+              aria-hidden="true"
+            ></span>
             {{ part.label }} — {{ part.count }} sites
           </li>
         </ul>
@@ -282,7 +305,7 @@ const assumptionRows = computed(() => {
               <span
                 class="bars__fill"
                 :class="`bars__fill--${item.status}`"
-                :style="{ width: (item.rm / maxRiskRm) * 100 + '%' }"
+                :style="{ '--bar-scale': item.rm / maxRiskRm }"
               ></span>
             </span>
             <span class="bars__value">{{ formatRinggit(item.rm) }}</span>
@@ -322,16 +345,17 @@ const assumptionRows = computed(() => {
             <span class="compare__value">{{ formatRinggit(row.low) }}</span>
           </div>
         </div>
-        <p class="verdict" :class="caseComparison.holdsAtWorst ? 'verdict--holds' : 'verdict--fails'">
+        <NoticeCallout class="verdict" :tone="caseComparison.holdsAtWorst ? 'good' : 'warning'">
           <template v-if="caseComparison.holdsAtWorst">
-            ✓ At the unfavourable end of every range, avoided-trip saving still exceeds exposure.
-            The recommendation holds.
+            At the unfavourable end of every range, avoided-trip saving still exceeds exposure.
+            <strong>The recommendation holds.</strong>
           </template>
           <template v-else>
-            ⚠ At the unfavourable end, exposure exceeds the saving from avoided site trips. The case
-            does not hold at the worst corner — say so before a judge finds it.
+            At the unfavourable end, exposure exceeds the saving from avoided site trips.
+            <strong>The case does not hold at the worst corner</strong> — say so before a judge
+            finds it.
           </template>
-        </p>
+        </NoticeCallout>
       </section>
 
       <p v-if="roi.co2e_factor_source" class="source">
@@ -358,7 +382,9 @@ const assumptionRows = computed(() => {
           </thead>
           <tbody>
             <tr v-for="row in assumptionRows" :key="row.key">
-              <td><code>{{ row.key }}</code></td>
+              <td>
+                <code>{{ row.key }}</code>
+              </td>
               <td class="table__num">{{ row.value }}</td>
               <td class="table__num">
                 <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
@@ -383,9 +409,9 @@ const assumptionRows = computed(() => {
 
 <style scoped>
 .screen {
-  max-width: 1100px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
 }
 
 .head {
@@ -398,18 +424,18 @@ const assumptionRows = computed(() => {
   border-bottom: 1px solid var(--border-hairline);
 }
 
-.head__eyebrow {
-  margin: 0 0 0.2rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .head__title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: clamp(2rem, 4vw, 3.7rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.head__month {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .head__right {
@@ -425,22 +451,35 @@ const assumptionRows = computed(() => {
   color: var(--text-muted);
 }
 
+/* A control, not an alert — so it reads as a surface with a full border
+   rather than borrowing the status accent bar that now belongs to NoticeCallout. */
 .case {
   margin: 1.25rem 0;
   padding: 0.85rem 1rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
-  border-left: 3px solid var(--status-warning);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
 }
 
 .case__switch {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  /* Comfortable hit area for the whole label, not just the 13px checkbox. */
+  min-height: 2.25rem;
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
+}
+
+.case__switch input {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  /* The one native control tinted to brand — the accent role, applied to the
+     browser's own checkbox rather than a custom re-implementation of one. */
+  accent-color: var(--action-fill);
 }
 
 .case__explain {
@@ -481,12 +520,15 @@ const assumptionRows = computed(() => {
   color: var(--text-secondary);
 }
 
+/* Same rule as DispatchView's outcome footer: brand amber marks the two
+   numbers that ARE the claim (trips avoided, money saved), and nothing else
+   on the screen competes for it. */
 .tile--primary .tile__value {
-  color: var(--text-primary);
+  color: var(--action-text);
 }
 
 .projection {
-  border: 1px solid var(--sx-border, #e5e7eb);
+  border: 1px solid var(--border-hairline);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
@@ -497,7 +539,7 @@ const assumptionRows = computed(() => {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--sx-text-muted, #6b7280);
+  color: var(--text-muted);
   margin: 0 0 0.5rem;
 }
 
@@ -510,7 +552,7 @@ const assumptionRows = computed(() => {
 .projection__horizon {
   font-size: 0.85rem;
   font-weight: 450;
-  color: var(--sx-text-muted, #6b7280);
+  color: var(--text-muted);
   margin-left: 0.4rem;
 }
 
@@ -518,7 +560,7 @@ const assumptionRows = computed(() => {
   margin: 0.4rem 0 0;
   font-size: 0.75rem;
   line-height: 1.45;
-  color: var(--sx-text-muted, #6b7280);
+  color: var(--text-muted);
   max-width: 68ch;
 }
 
@@ -526,7 +568,7 @@ const assumptionRows = computed(() => {
   margin-top: 0.35rem;
   font-size: 0.7rem;
   line-height: 1.35;
-  color: var(--sx-text-muted, #6b7280);
+  color: var(--text-muted);
   max-width: 34ch;
 }
 
@@ -584,7 +626,6 @@ const assumptionRows = computed(() => {
   display: grid;
   place-items: center;
   min-width: 3px;
-  transition: width 200ms ease;
 }
 
 .split__part--dispatch {
@@ -595,6 +636,9 @@ const assumptionRows = computed(() => {
 }
 .split__part--healthy {
   background: var(--status-good);
+}
+.split__part--not_assessed {
+  background: var(--text-muted);
 }
 
 .split__label {
@@ -635,6 +679,9 @@ const assumptionRows = computed(() => {
 .split__swatch--healthy {
   background: var(--status-good);
 }
+.split__swatch--not_assessed {
+  background: var(--text-muted);
+}
 
 /* Ranked bars */
 .bars {
@@ -668,9 +715,12 @@ const assumptionRows = computed(() => {
 
 .bars__fill {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: 2px;
-  transition: width 200ms ease;
+  transform: scaleX(var(--bar-scale, 0));
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-in-out);
 }
 
 .bars__fill--dispatch {
@@ -741,22 +791,11 @@ const assumptionRows = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* Tint, border and icon come from NoticeCallout; the tone is bound to whether the
+   case actually holds at the worst corner, so a failing case looks different
+   from a passing one without this screen restating the rule. */
 .verdict {
-  margin: 0;
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.verdict--holds {
-  border-left: 3px solid var(--status-good);
-  background: var(--page-plane);
-}
-
-.verdict--fails {
-  border-left: 3px solid var(--status-critical);
-  background: var(--page-plane);
+  margin-top: 0.25rem;
 }
 
 /* --- Assumptions --- */

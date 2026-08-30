@@ -71,3 +71,14 @@ scratch/
 # Stray root lockfile. The only npm project is apps/web; an empty lockfile at
 # the root confuses monorepo build detection and belongs to nothing.
 /package-lock.json
+
+# --- Claude Code (personal, not project) -------------------------------------
+# Personal skill packs mirrored in here from the user's own machine so Claude
+# has them available in this repo — not SolaraX-authored, not something a
+# teammate cloning the repo needs, and ~9 MB is a lot to carry in git history
+# for someone else's tooling. Reinstall locally rather than committing it.
+.claude/skills/
+# Local permission/hook overrides are machine-specific by convention; a
+# project-shared .claude/settings.json (if one is ever added) still gets
+# tracked normally.
+.claude/settings.local.json

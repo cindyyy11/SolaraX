@@ -81,11 +81,37 @@ export async function loadDispatch(force = false): Promise<LoadResult> {
 // Reshaping lives here, never in components. The pipeline emits long format;
 // charts want it grouped. That transform happens once, in this file.
 
-/** Sites in one triage group, already ordered by rank. */
+/**
+ * Did the detector actually reach a verdict on this site?
+ *
+ * A site excluded from analysis has no verdict, only a default. It still
+ * carries status "healthy" in the artifact because the frozen schema allows
+ * exactly three values and validator rule 4 asserts the three counts sum to
+ * site_count — so `dispatch.json` has no way to say "not assessed", and the
+ * split has to be made here, at the point of display.
+ *
+ * This is the same reasoning that dropped GOLDEN-01 on 19 Aug: a site with no
+ * measurements cannot be called healthy. S-1367 is 277 kWp — 21% of fleet
+ * capacity — and reports 1.11 kWh/kWp/day against a fleet median of 3.83.
+ * Counting it as healthy overstates how much of the fleet was cleared.
+ */
+export function isAssessed(site: Site): boolean {
+  return !site.excluded_from_analysis?.excluded
+}
+
+const byRank = (a: Site, b: Site): number =>
+  (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+
+/** Sites in one triage group, already ordered by rank. Assessed sites only. */
 export function sitesByStatus(dispatch: Dispatch, status: SiteStatus): Site[] {
   return dispatch.sites
-    .filter((site) => site.status === status)
-    .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER))
+    .filter((site) => site.status === status && isAssessed(site))
+    .sort(byRank)
+}
+
+/** Sites the detector never ruled on — shown as their own group, never hidden. */
+export function sitesNotAssessed(dispatch: Dispatch): Site[] {
+  return dispatch.sites.filter((site) => !isAssessed(site)).sort(byRank)
 }
 
 export function findSite(dispatch: Dispatch, siteId: string): Site | undefined {

@@ -16,6 +16,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ArrowLeft, ArrowRight, CircleSlash } from '@lucide/vue'
 import {
   loadDispatch,
   findSite,
@@ -29,7 +30,10 @@ import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import CohortChart from '@/components/CohortChart.vue'
 import InverterPanel from '@/components/InverterPanel.vue'
 import InverterThermalMap from '@/components/InverterThermalMap.vue'
-import VisionEvidence from '@/components/VisionEvidence.vue' 
+import VisionEvidence from '@/components/VisionEvidence.vue'
+import NoticeCallout from '@/components/NoticeCallout.vue'
+import PerformanceModel from '@/components/PerformanceModel.vue'
+import SiteComparison from '@/components/SiteComparison.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -61,7 +65,9 @@ const cohort = computed(() => {
     <p v-else-if="!site">No site with id {{ route.params.siteId }}.</p>
 
     <template v-else>
-      <RouterLink to="/" class="back">← Dispatch list</RouterLink>
+      <RouterLink to="/" class="back">
+        <ArrowLeft :size="14" aria-hidden="true" /> Dispatch list
+      </RouterLink>
 
       <header class="head">
         <div>
@@ -78,14 +84,20 @@ const cohort = computed(() => {
             :to="`/site/${site.site_id}/work-order`"
             class="work-order-link"
           >
-            Generate work order →
+            Generate work order
+            <ArrowRight :size="15" aria-hidden="true" />
           </RouterLink>
         </div>
       </header>
 
       <!-- Excluded sites explain themselves before anything else on the page. -->
-      <section v-if="site.excluded_from_analysis" class="excluded">
-        <h2 class="excluded__title">⊘ Excluded from analysis</h2>
+      <NoticeCallout
+        v-if="site.excluded_from_analysis"
+        tone="warning"
+        :icon="CircleSlash"
+        class="excluded"
+      >
+        <h2 class="excluded__title">Excluded from analysis</h2>
         <p class="excluded__detail">{{ site.excluded_from_analysis.detail }}</p>
         <dl class="excluded__facts">
           <div>
@@ -109,7 +121,10 @@ const cohort = computed(() => {
           The series below is this site's own measured output and is shown as recorded. No peer
           overlay is drawn, because the site is not being compared against its cohort.
         </p>
-      </section>
+      </NoticeCallout>
+
+      <PerformanceModel :site="site" />
+      <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
       <!-- Block 1 — cohort chart, full width, above everything else. -->
       <section class="block">
@@ -121,8 +136,8 @@ const cohort = computed(() => {
           :economics="site.economics"
         />
         <p v-else class="empty">
-          No cohort series for this site. Healthy sites omit peer data by design —
-          docs/Schema.md section 8.7.
+          No cohort series for this site. Healthy sites omit peer data by design — docs/Schema.md
+          section 8.7.
         </p>
       </section>
 
@@ -133,20 +148,49 @@ const cohort = computed(() => {
         <p class="panel__detail">{{ site.hypothesis.detail }}</p>
 
         <dl class="facts">
-          <div><dt>Method</dt><dd>{{ site.detection.method }}</dd></div>
-          <div><dt>Score</dt><dd>{{ site.detection.score }} ({{ site.detection.score_type }})</dd></div>
-          <div><dt>Threshold</dt><dd>{{ site.detection.threshold }}</dd></div>
-          <div><dt>Confidence</dt><dd>{{ Math.round(site.detection.confidence * 100) }}%</dd></div>
-          <div><dt>Cohort</dt><dd>{{ cohort?.label }} · {{ site.detection.cohort_size }} sites</dd></div>
-          <div v-if="site.divergence"><dt>Diverging since</dt><dd>{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</dd></div>
-          <div><dt>At risk</dt><dd>{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</dd></div>
-          <div><dt>Calculation</dt><dd>{{ site.economics.calculation }}</dd></div>
+          <div>
+            <dt>Method</dt>
+            <dd>{{ site.detection.method }}</dd>
+          </div>
+          <div>
+            <dt>Score</dt>
+            <dd>{{ site.detection.score }} ({{ site.detection.score_type }})</dd>
+          </div>
+          <div>
+            <dt>Threshold</dt>
+            <dd>{{ site.detection.threshold }}</dd>
+          </div>
+          <div>
+            <dt>Confidence</dt>
+            <dd>{{ Math.round(site.detection.confidence * 100) }}%</dd>
+          </div>
+          <div>
+            <dt>Cohort</dt>
+            <dd>{{ cohort?.label }} · {{ site.detection.cohort_size }} sites</dd>
+          </div>
+          <div v-if="site.divergence">
+            <dt>Diverging since</dt>
+            <dd>{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</dd>
+          </div>
+          <div>
+            <dt>At risk</dt>
+            <dd>{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</dd>
+          </div>
+          <div>
+            <dt>Calculation</dt>
+            <dd>{{ site.economics.calculation }}</dd>
+          </div>
         </dl>
 
-        <p v-if="!site.detection.cohort_meets_minimum" class="caution">
-          ⚠ This cohort is below the minimum size. Peer comparison is weaker here — treat the
-          score with caution.
-        </p>
+        <NoticeCallout
+          v-if="!site.detection.cohort_meets_minimum"
+          tone="warning"
+          compact
+          class="caution"
+        >
+          This cohort is below the minimum size. Peer comparison is weaker here — treat the score
+          with caution.
+        </NoticeCallout>
       </section>
 
       <p v-else class="panel">This site is within cohort tolerance. No detection recorded.</p>
@@ -171,29 +215,32 @@ const cohort = computed(() => {
         than rendering nothing. See VISION_API_URL in services/api.ts.
       -->
       <section v-if="site.detection && visionAvailable" class="block">
-        <VisionEvidence
-          :site-id="site.site_id"
-          :site-name="site.name"
-        />
+        <VisionEvidence :site-id="site.site_id" :site-name="site.name" />
       </section>
-
     </template>
   </main>
 </template>
 
 <style scoped>
 .screen {
-  max-width: 1100px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 4rem;
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
 }
 
 .back {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
   margin-bottom: 1rem;
   font-size: 0.85rem;
   color: var(--text-secondary);
   text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.back:hover {
+  color: var(--action-text);
 }
 
 .head {
@@ -208,7 +255,11 @@ const cohort = computed(() => {
 
 .head__name {
   margin: 0;
-  font-size: 1.4rem;
+  max-width: 26ch;
+  font-size: clamp(2rem, 3.5vw, 3.15rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 
 .head__meta {
@@ -224,28 +275,65 @@ const cohort = computed(() => {
   gap: 0.5rem;
 }
 
+/*
+ * The one primary action on this screen — the button that moves a flagged
+ * site into the DETECT -> VERIFY flow. Filled amber with navy ink, per
+ * theme.css's --action-fill / --action-ink pairing: this is the role brand
+ * color exists to play, used exactly once per screen.
+ */
 .work-order-link {
-  padding: 0.4rem 0.8rem;
-  background: var(--text-primary);
-  color: var(--surface-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--action-fill);
+  color: var(--action-ink);
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.work-order-link:hover {
+  background: var(--action-fill-hover);
+}
+
+.work-order-link:active {
+  transform: scale(0.97);
+}
+
+.work-order-link svg {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.work-order-link:hover svg {
+  transform: translateX(2px);
 }
 
 .block {
   margin: 1.5rem 0;
 }
 
-.excluded {
+/* Visual treatment (tint, border, icon) comes from NoticeCallout, whose root
+   element also carries this "excluded" class (Vue merges a component's
+   fallthrough class onto its single root). This only adds the extra
+   breathing room this particular callout's richer content — a heading, a
+   fact grid, a closing note — needs over NoticeCallout's compact default.
+   ".excluded.callout" is a compound selector on that one shared element, with
+   higher specificity than NoticeCallout's own ".callout" rule, so it wins
+   deterministically rather than depending on which component's scoped CSS
+   the bundler happens to emit first. */
+.excluded.callout {
   margin: 1.5rem 0;
-  padding: 1.25rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-left: 3px solid var(--status-warning);
-  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+}
+
+.excluded :deep(.callout__body) {
+  width: 100%;
 }
 
 .excluded__title {
@@ -315,7 +403,8 @@ const cohort = computed(() => {
   padding: 1.25rem;
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
 }
 
 .panel__heading {
@@ -370,9 +459,5 @@ const cohort = computed(() => {
 
 .caution {
   margin: 1rem 0 0;
-  padding: 0.6rem 0.8rem;
-  border-left: 3px solid var(--status-serious);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 </style>

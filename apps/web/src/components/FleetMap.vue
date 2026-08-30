@@ -19,37 +19,178 @@
  * dataset does not contain. Same principle as the rule against rendering a
  * panel grid.
  */
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch, h } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
+import { defineAsyncComponent } from 'vue'
+import { TriangleAlert, Diamond, CircleCheck, Box } from '@lucide/vue'
 import type { Site, SiteStatus } from '@/types/dispatch'
+import { basemapForView, type MapViewMode } from './fleetBasemap'
+
+/**
+ * Lazy on purpose. deck.gl alone is roughly 1 MB before gzip — bundling it
+ * into the eagerly-loaded main chunk means every visitor pays for it on the
+ * landing screen, whether or not they ever open the 3D tab. This keeps it in
+ * its own chunk, fetched only the first time someone clicks "3D".
+ */
+const FleetSkyline3D = defineAsyncComponent({
+  loader: () => import('@/components/FleetSkyline3D.vue'),
+  delay: 0,
+  // A cold chunk fetch is the one moment this tab is legitimately blank; name
+  // it so that reads as "loading" rather than "broken".
+  // A render function, not a `template` string: Vite aliases `vue` to the
+  // runtime-only build, which cannot compile a template string at runtime —
+  // that silently drops this component, so the "loading" state was actually
+  // blank the whole time.
+  loadingComponent: {
+    render: () =>
+      h('div', { class: 'map-3d-loading' }, [
+        h('span', { class: 'map-3d-loading__pulse' }),
+        h('strong', 'Building the risk landscape'),
+        h('small', 'Loading measured coordinates and monthly ringgit exposure…'),
+      ]),
+  },
+})
 
 const props = defineProps<{
   sites: Site[]
   /** Site currently highlighted from the list, if any. */
   activeSiteId?: string | null
+  /** Shareable parent-controlled starting mode. */
+  initialView?: MapViewMode
 }>()
 
 const emit = defineEmits<{
   (event: 'select', siteId: string): void
+  /** Lets the parent screen give the 3D skyline more room — it is the one
+   *  view here where the extra dimension is wasted in a narrow sidebar. */
+  (event: 'view-change', view: MapViewMode): void
 }>()
 
 const container = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let clusterGroup: L.MarkerClusterGroup | null = null
+let baseLayer: L.TileLayer | null = null
+let fallbackLayer: L.GridLayer | null = null
 const markersBySiteId = new Map<string, L.Marker>()
+const basemapUnavailable = ref(false)
+
+class BasemapFallbackLayer extends L.GridLayer {
+  protected createTile(_coords: L.Coords, done: L.DoneCallback): HTMLElement {
+    const tile = L.DomUtil.create('div', 'basemap-fallback-tile')
+    done(undefined, tile)
+    return tile
+  }
+}
+
+/**
+ * Provider choice is deliberately view-specific.
+ *
+ * CARTO's free raster tiles now burn "API KEY REQUIRED" across every tile —
+ * they return 200, so nothing errors and nothing logs, the watermark just sits
+ * over the fleet map. Esri's Gray Canvas later replaced OSM, but it serves
+ * "Map data not yet available" tiles in this fleet view. Map therefore uses
+ * keyless OSM Standard; Esri remains only where it is needed for Aerial.
+ */
+// Leaflet must establish a valid map and zoom range before a shared URL can
+// hand the surface to 3D. Starting the hidden Leaflet instance directly in
+// `3d` leaves it without a basemap maxZoom and markercluster then throws.
+const view = ref<MapViewMode>('map')
+
+/**
+ * AERIAL IS THE ONE HONEST WAY TO "SHOW THE PRODUCT".
+ *
+ * PVDAQ publishes no panel positions, array geometry, or site plans. Satellite
+ * imagery is a real photograph at real dataset coordinates, not invented
+ * geometry. The Map view remains the neutral geographic context.
+ */
+function removeBasemapLayers(): void {
+  if (!map) return
+  if (baseLayer) map.removeLayer(baseLayer)
+  if (fallbackLayer) map.removeLayer(fallbackLayer)
+  baseLayer = null
+  fallbackLayer = null
+}
+
+function showLocalBasemapFallback(): void {
+  if (!map || basemapUnavailable.value || view.value !== 'map') return
+
+  basemapUnavailable.value = true
+  if (baseLayer) map.removeLayer(baseLayer)
+  baseLayer = null
+
+  fallbackLayer = new BasemapFallbackLayer({ tileSize: 256 })
+  fallbackLayer.addTo(map)
+}
+
+/** Replace the complete layer so stale provider tiles and attribution cannot
+ * survive a view change. */
+function installBasemap(): void {
+  if (!map) return
+  removeBasemapLayers()
+  basemapUnavailable.value = false
+
+  const config = basemapForView(view.value)
+  if (!config) return
+
+  baseLayer = L.tileLayer(config.url, {
+    attribution: config.attribution,
+    maxZoom: config.maxZoom,
+  })
+  if (view.value === 'map') baseLayer.on('tileerror', showLocalBasemapFallback)
+  baseLayer.addTo(map)
+}
+
+function setView(next: MapViewMode): void {
+  if (view.value === next) return
+  view.value = next
+  installBasemap()
+  emit('view-change', next)
+  // Leaflet's tile canvas is sized once on mount; toggling away to the 3D
+  // panel and back changes this container's box without Leaflet knowing, so
+  // its internal size cache goes stale and tiles render into the wrong
+  // bounds until interacted with.
+  if (next !== '3d') requestAnimationFrame(() => map?.invalidateSize())
+}
 
 /**
  * Status colors are reserved and always pair with a glyph, so meaning never
- * rests on color alone — the same rule the list rows follow.
+ * rests on color alone — the same rule the list rows follow. Same icon
+ * vocabulary as DispatchView and InverterPanel: triangle = needs action,
+ * diamond = watch it, circle-check = fine.
+ *
+ * Leaflet renders marker icons and popups from raw HTML strings OUTSIDE
+ * Vue's tree, so a Vue icon component cannot be mounted here — these are the
+ * exact stroke paths lucide's TriangleAlert / Diamond / CircleCheck ship,
+ * reproduced as literal SVG markup so the marker matches the rest of the
+ * product's icon language pixel-for-pixel rather than approximating it.
  */
-const STATUS_STYLE: Record<SiteStatus, { color: string; glyph: string }> = {
-  dispatch: { color: 'var(--status-critical)', glyph: '▲' },
-  monitor: { color: 'var(--status-warning)', glyph: '◆' },
-  healthy: { color: 'var(--status-good)', glyph: '●' },
+const STATUS_ICON_PATH: Record<SiteStatus, string> = {
+  dispatch:
+    '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>' +
+    '<path d="M12 9v4"/><path d="M12 17h.01"/>',
+  monitor:
+    '<path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 ' +
+    '2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z"/>',
+  healthy: '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
+}
+
+const STATUS_STYLE: Record<SiteStatus, { color: string }> = {
+  dispatch: { color: 'var(--status-critical)' },
+  monitor: { color: 'var(--status-warning)' },
+  healthy: { color: 'var(--status-good)' },
+}
+
+function markerSvg(status: SiteStatus): string {
+  return (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
+    STATUS_ICON_PATH[status] +
+    '</svg>'
+  )
 }
 
 function buildIcon(site: Site, isActive: boolean): L.DivIcon {
@@ -58,7 +199,7 @@ function buildIcon(site: Site, isActive: boolean): L.DivIcon {
     className: 'fleet-marker-wrapper',
     html: `<span class="fleet-marker${isActive ? ' fleet-marker--active' : ''}"
                  style="color:${style.color}"
-                 title="${site.name} — ${site.status}">${style.glyph}</span>`,
+                 title="${site.name} — ${site.status}">${markerSvg(site.status)}</span>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
   })
@@ -111,13 +252,7 @@ onMounted(() => {
     attributionControl: true,
   })
 
-  // OpenStreetMap standard tiles: keyless and requires no account. CARTO's
-  // basemaps now watermark unauthenticated tiles with "API KEY REQUIRED",
-  // and a judged public URL must not depend on a key we'd have to ship.
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(map)
+  installBasemap()
 
   clusterGroup = L.markerClusterGroup({
     showCoverageOnHover: false,
@@ -129,16 +264,29 @@ onMounted(() => {
   map.addLayer(clusterGroup)
 
   renderMarkers()
+
+  if (props.initialView && props.initialView !== 'map') {
+    setView(props.initialView)
+  }
 })
 
 onBeforeUnmount(() => {
+  removeBasemapLayers()
   map?.remove()
   map = null
   clusterGroup = null
+  baseLayer = null
   markersBySiteId.clear()
 })
 
 watch(() => props.sites, renderMarkers, { deep: false })
+
+watch(
+  () => props.initialView,
+  (next) => {
+    if (next) setView(next)
+  },
+)
 
 watch(
   () => props.activeSiteId,
@@ -147,7 +295,7 @@ watch(
       const site = props.sites.find((item) => item.site_id === id)
       if (site) marker.setIcon(buildIcon(site, id === siteId))
     }
-    if (!siteId || !clusterGroup) return
+    if (!siteId || !clusterGroup || view.value === '3d') return
     const marker = markersBySiteId.get(siteId)
     if (marker) {
       // Fans the cluster open if the target is hidden inside one.
@@ -159,12 +307,81 @@ watch(
 
 <template>
   <div class="map-frame">
-    <div ref="container" class="map-canvas"></div>
-    <p class="map-legend">
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--dispatch">▲</span> dispatch</span>
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--monitor">◆</span> monitor</span>
-      <span class="map-legend__item"><span class="map-legend__glyph map-legend__glyph--healthy">●</span> healthy</span>
-      <span class="map-legend__hint">numbered circles group nearby sites — click to fan out</span>
+    <div class="map-shell" :data-view="view">
+      <div v-show="view !== '3d'" ref="container" class="map-canvas"></div>
+      <p v-if="basemapUnavailable && view === 'map'" class="basemap-notice" role="status">
+        Basemap temporarily unavailable — site locations remain interactive.
+      </p>
+      <FleetSkyline3D
+        v-if="view === '3d'"
+        :sites="sites"
+        :active-site-id="activeSiteId"
+        @select="(id) => emit('select', id)"
+      />
+
+      <!--
+        Three named views rather than unlabelled icons: a first-time viewer
+        cannot guess what "3D" gives them without the word, let alone an icon.
+      -->
+      <div class="map-views" role="group" aria-label="Basemap">
+        <button
+          type="button"
+          class="map-views__button"
+          :class="{ 'map-views__button--active': view === 'map' }"
+          :aria-pressed="view === 'map'"
+          @click="setView('map')"
+        >
+          Map
+        </button>
+        <button
+          type="button"
+          class="map-views__button"
+          :class="{ 'map-views__button--active': view === 'aerial' }"
+          :aria-pressed="view === 'aerial'"
+          @click="setView('aerial')"
+        >
+          Aerial
+        </button>
+        <button
+          type="button"
+          class="map-views__button map-views__button--3d"
+          :class="{ 'map-views__button--active': view === '3d' }"
+          :aria-pressed="view === '3d'"
+          @click="setView('3d')"
+        >
+          <Box :size="12" aria-hidden="true" /> 3D
+        </button>
+      </div>
+    </div>
+    <p v-if="view !== '3d'" class="map-legend">
+      <span class="map-legend__item">
+        <TriangleAlert
+          class="map-legend__glyph map-legend__glyph--dispatch"
+          :size="13"
+          aria-hidden="true"
+        />
+        dispatch
+      </span>
+      <span class="map-legend__item">
+        <Diamond
+          class="map-legend__glyph map-legend__glyph--monitor"
+          :size="13"
+          aria-hidden="true"
+        />
+        monitor
+      </span>
+      <span class="map-legend__item">
+        <CircleCheck
+          class="map-legend__glyph map-legend__glyph--healthy"
+          :size="13"
+          aria-hidden="true"
+        />
+        healthy
+      </span>
+      <span class="map-legend__hint">
+        numbered circles group nearby sites — click to fan out, then zoom in on Aerial to see the
+        array itself, or switch to 3D for a risk skyline
+      </span>
     </p>
   </div>
 </template>
@@ -177,20 +394,108 @@ watch(
   background: var(--surface-1);
 }
 
-/* Half the viewport height. Tall enough that the Vegas and Mid-Atlantic
-   clusters are both readable without zooming, and it stays put while the
-   list scrolls beside it. */
+/*
+ * Height is set from the FLEET'S OWN ASPECT, not from the viewport.
+ *
+ * `fitBounds` zooms until the bounding box fits BOTH axes, so the more
+ * constrained axis wins. This fleet spans roughly 3,600 km east-west and
+ * 500 km north-south — a very wide, flat box — inside a column that is at
+ * most 420px wide. Width is therefore always the binding constraint, and at
+ * 50vh the leftover vertical space was filled with several thousand km of
+ * empty ocean and continent: the screen opened on a map of the Americas
+ * rather than a map of the fleet.
+ *
+ * A shorter frame spends the pixels on the sites instead. It cannot change
+ * the zoom — width still decides that — but it stops the map from paying for
+ * latitude nobody is looking at.
+ */
+.map-shell {
+  position: relative;
+}
+
 .map-canvas {
-  height: 50vh;
-  min-height: 380px;
+  height: 520px;
   width: 100%;
+}
+
+.basemap-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  z-index: 900;
+  max-width: calc(100% - 1.5rem);
+  margin: 0;
+  padding: 0.4rem 0.65rem;
+  transform: translateX(-50%);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 @media (max-width: 900px) {
   .map-canvas {
-    height: 42vh;
-    min-height: 260px;
+    height: 360px;
   }
+}
+
+/* Above Leaflet's own panes (400) and controls (800), below the app nav (20
+   on a different stacking context) — see the z-index note in theme.css. */
+.map-views {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 900;
+  display: flex;
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+
+.map-views__button {
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.map-views__button + .map-views__button {
+  border-left: 1px solid var(--border-hairline);
+}
+
+.map-views__button--3d {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.map-views__button:hover {
+  color: var(--text-primary);
+  background: var(--callout-info-bg);
+}
+
+/* The selected view is the one place a segmented control needs the accent —
+   it is a selection state, which is the role brand colour plays here. */
+.map-views__button--active {
+  background: var(--action-fill);
+  color: var(--action-ink);
+}
+
+.map-views__button--active:hover {
+  background: var(--action-fill-hover);
+  color: var(--action-ink);
 }
 
 .map-legend {
@@ -211,6 +516,10 @@ watch(
   gap: 0.25rem;
 }
 
+.map-legend__glyph {
+  flex: none;
+}
+
 .map-legend__glyph--dispatch {
   color: var(--status-critical);
 }
@@ -226,6 +535,59 @@ watch(
   color: var(--text-muted);
   opacity: 0.8;
 }
+
+.map-3d-loading {
+  display: flex;
+  height: 480px;
+  margin: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  color: var(--nav-text);
+  background: var(--nav-surface);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.map-3d-loading strong {
+  color: var(--nav-text-strong);
+  font: 650 1rem var(--font-display);
+}
+
+.map-3d-loading small {
+  max-width: 32ch;
+  line-height: 1.5;
+}
+
+.map-3d-loading__pulse {
+  width: 2.6rem;
+  height: 2.6rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--nav-active-border);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.55rem var(--nav-active);
+  animation: map-load 1.4s var(--ease-out) infinite alternate;
+}
+
+@keyframes map-load {
+  to {
+    opacity: 0.55;
+    transform: scale(0.88);
+  }
+}
+
+@media (max-width: 900px) {
+  .map-3d-loading {
+    height: 360px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-3d-loading__pulse {
+    animation: none;
+  }
+}
 </style>
 
 <!--
@@ -233,20 +595,41 @@ watch(
   so these must be global.
 -->
 <style>
+.basemap-fallback-tile {
+  box-sizing: border-box;
+  background-color: var(--surface-2, #eef1f3);
+  background-image:
+    linear-gradient(var(--border-hairline, #d7dce0) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-hairline, #d7dce0) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
 .fleet-marker {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  font-size: 14px;
   line-height: 1;
-  /* A surface-colored ring keeps overlapping marks legible. */
-  text-shadow:
-    0 0 3px var(--surface-1),
-    0 0 3px var(--surface-1),
-    0 0 3px var(--surface-1);
   cursor: pointer;
-  transition: transform 120ms ease;
+  transition: transform var(--duration-fast, 140ms) ease;
+}
+
+.fleet-marker svg {
+  /* A surface-colored ring keeps overlapping marks legible, same intent as
+     the old text-shadow trick, expressed for a stroked SVG instead of text. */
+  filter: drop-shadow(0 0 2px var(--surface-1, #fff)) drop-shadow(0 0 2px var(--surface-1, #fff));
+}
+
+/*
+ * Aerial imagery is photographic and mostly dark, so the ring cannot follow
+ * the theme here: in dark mode --surface-1 is near-black and the halo would
+ * vanish into the satellite photo exactly where the marker needs separating
+ * from it. Pinned white, and strengthened, because a rooftop is a far busier
+ * backdrop than a flat canvas.
+ */
+.map-shell[data-view='aerial'] .fleet-marker svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.85)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .fleet-marker--active {

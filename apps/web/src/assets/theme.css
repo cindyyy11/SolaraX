@@ -17,17 +17,37 @@
 
   /* Surfaces */
   --surface-1: #fcfcfb;
+  --surface-2: #f2f3ef;
+  --surface-emphasis: #f5eee7;
+  --surface-selected: #fff7e8;
   --page-plane: #f9f9f7;
 
   /* Ink */
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  /* Was #898781, which measured 3.50:1 against --surface-1 — below the 4.5:1
+     AA floor, and it carries a lot of real content here: every meta line,
+     axis label, unit and provenance note. Darkened to clear the floor on both
+     the card surface (4.75:1) and the page plane (4.62:1) while staying a
+     recessive warm gray. Dark mode already passed at 4.85:1 and is unchanged. */
+  --text-muted: #73716c;
 
   /* Structure */
   --gridline: #e1e0d9;
   --baseline: #c3c2b7;
   --border-hairline: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.22);
+
+  /* Mission-control shell */
+  --nav-surface: #101b18;
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --nav-text: #9aaca4;
+  --nav-text-strong: #f2f7f4;
+  --nav-hover: rgba(255, 255, 255, 0.055);
+  --nav-active: rgba(227, 162, 70, 0.14);
+  --nav-active-border: rgba(227, 162, 70, 0.3);
+  --nav-active-text: #f3ba67;
+  --signal-live: #68d99b;
 
   /* Status — reserved, never themed, never a series color */
   --status-good: #0ca30c;
@@ -42,9 +62,85 @@
 
   --success-text: #006300;
 
+  /* Brand — the identity, sampled from the SolaraX mark.
+     --brand-solar is fixed in both themes: it is the one warm accent in the
+     product and the only colour the sun ever takes. --brand-ink is the
+     structural stroke and inverts, because navy on a near-black plate is
+     invisible. Neither is a status colour and neither may be used as one. */
+  --brand-navy: #192c4c;
+  --brand-solar: #e3a246;
+  --brand-ink: var(--brand-navy);
+
+  /* --brand-solar-deep exists for ONE reason: raw --brand-solar fails WCAG
+     against a light surface. Text/icon/focus-ring contrast against
+     --surface-1 (#fcfcfb) measures 2.2:1 — short of the 3:1 floor for
+     non-text UI and nowhere near 4.5:1 for text. This is the same hue at
+     lower lightness, chosen so it clears 4.5:1 (measures ~5.1:1). Use it
+     for amber TEXT, amber ICONS and the amber FOCUS RING on a light
+     surface. Never use it as a fill — --brand-solar is the fill color,
+     paired with --brand-navy ink; see --action-fill / --action-ink below. */
+  --brand-solar-deep: #96631a;
+
+  /* Action — the one interactive/accent role brand color plays outside the
+     logo. This is what "aligned with the logo colour scheme" means in
+     practice: rarity gives it force. It marks the primary action, the
+     active nav item, the focus ring and nothing else — never a status,
+     never a chart series, never decoration.
+       --action-text  amber used AS a foreground (links, icons, focus ring)
+       --action-fill  amber used AS a background (primary buttons, active
+                      chips) — always paired with --action-ink, never with
+                      --text-primary, because raw amber fails against
+                      near-black text at the sizes buttons use
+       --action-ink   the ink that sits ON --action-fill */
+  --action-text: var(--brand-solar-deep);
+  --action-fill: var(--brand-solar);
+  --action-fill-hover: #cf8f37;
+  --action-ink: var(--brand-navy);
+  --focus-ring: var(--brand-solar-deep);
+
+  /* Callout surfaces — a tinted plate + icon, replacing a colored
+     border-left. One shared idiom for warning / critical / good / info,
+     used by every alert-shaped block in the product instead of an
+     ad-hoc accent bar. Tints are the status hue at low, fixed alpha so
+     they hold their meaning without competing with data on the same
+     screen. */
+  --callout-warning-bg: rgba(250, 178, 25, 0.1);
+  --callout-warning-border: rgba(250, 178, 25, 0.35);
+  --callout-critical-bg: rgba(208, 59, 59, 0.08);
+  --callout-critical-border: rgba(208, 59, 59, 0.3);
+  --callout-good-bg: rgba(12, 163, 12, 0.08);
+  --callout-good-border: rgba(12, 163, 12, 0.28);
+  --callout-info-bg: rgba(25, 44, 76, 0.05);
+  --callout-info-border: rgba(25, 44, 76, 0.16);
+
+  /* Icon sizing — one scale, so every glyph in the product sits on the same
+     rhythm instead of each component picking its own pixel value. */
+  --icon-xs: 14px;
+  --icon-sm: 16px;
+  --icon-md: 18px;
+  --icon-lg: 22px;
+
+  /* Motion — one shared rhythm. Exponential ease-out reads as physical
+     settling rather than mechanical linear movement; everything that
+     animates in this product uses this pair rather than inventing its own
+     timing. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+
   --radius-sm: 4px;
   --radius-md: 8px;
-  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  --elevation-1: 0 10px 30px rgba(25, 44, 76, 0.055);
+
+  /* Type — see fonts.css for why these two faces and why they are self-hosted.
+     The fallback stacks are chosen to be metrically close so the one reflow
+     when the webfont lands is small rather than a visible jump. */
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Sans Variable', 'Inter Variable', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +148,9 @@
     color-scheme: dark;
 
     --surface-1: #1a1a19;
+    --surface-2: #222522;
+    --surface-emphasis: #211a17;
+    --surface-selected: #2a241a;
     --page-plane: #0d0d0d;
 
     --text-primary: #ffffff;
@@ -61,12 +160,32 @@
     --gridline: #2c2c2a;
     --baseline: #383835;
     --border-hairline: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --elevation-1: 0 12px 34px rgba(0, 0, 0, 0.22);
 
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
 
     --success-text: #0ca30c;
+
+    --brand-ink: #f2f4f8;
+
+    /* Raw --brand-solar already clears 8:1 against a near-black surface, so
+       dark mode uses it directly rather than the deepened light-mode
+       variant — the accent gets to be its true color where it can afford
+       to be. */
+    --action-text: var(--brand-solar);
+    --focus-ring: var(--brand-solar);
+
+    --callout-warning-bg: rgba(250, 178, 25, 0.16);
+    --callout-warning-border: rgba(250, 178, 25, 0.4);
+    --callout-critical-bg: rgba(208, 59, 59, 0.16);
+    --callout-critical-border: rgba(208, 59, 59, 0.4);
+    --callout-good-bg: rgba(12, 163, 12, 0.16);
+    --callout-good-border: rgba(12, 163, 12, 0.4);
+    --callout-info-bg: rgba(242, 244, 248, 0.06);
+    --callout-info-border: rgba(242, 244, 248, 0.16);
   }
 }
 
@@ -74,6 +193,9 @@
   color-scheme: dark;
 
   --surface-1: #1a1a19;
+  --surface-2: #222522;
+  --surface-emphasis: #211a17;
+  --surface-selected: #2a241a;
   --page-plane: #0d0d0d;
 
   --text-primary: #ffffff;
@@ -83,12 +205,28 @@
   --gridline: #2c2c2a;
   --baseline: #383835;
   --border-hairline: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --elevation-1: 0 12px 34px rgba(0, 0, 0, 0.22);
 
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
 
   --success-text: #0ca30c;
+
+  --brand-ink: #f2f4f8;
+
+  --action-text: var(--brand-solar);
+  --focus-ring: var(--brand-solar);
+
+  --callout-warning-bg: rgba(250, 178, 25, 0.16);
+  --callout-warning-border: rgba(250, 178, 25, 0.4);
+  --callout-critical-bg: rgba(208, 59, 59, 0.16);
+  --callout-critical-border: rgba(208, 59, 59, 0.4);
+  --callout-good-bg: rgba(12, 163, 12, 0.16);
+  --callout-good-border: rgba(12, 163, 12, 0.4);
+  --callout-info-bg: rgba(242, 244, 248, 0.06);
+  --callout-info-border: rgba(242, 244, 248, 0.16);
 }
 
 body {
@@ -97,8 +235,82 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   min-height: 100vh;
+  overflow-x: clip;
+  /* This product is almost entirely numbers in columns. Tabular figures stop
+     a ringgit total from shifting width as its digits change. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The display face carries headings; the data face carries everything else.
+   Set once here rather than per component, so a heading anywhere in the
+   product speaks with the same voice. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
 }
 
 * {
   box-sizing: border-box;
+}
+
+[data-demo-focus] {
+  outline: 3px solid var(--action-text);
+  outline-offset: 5px;
+  border-radius: var(--radius-lg);
+}
+
+/* --- Browser surfaces we did not draw, themed anyway ------------------- */
+/* These ship with the OS default the instant a page loads, and a default
+   focus ring or a default text-selection color is the fastest tell that a
+   page was assembled rather than designed. One rule each, sitewide. */
+
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  /* Amber fill needs navy ink at any lightness — see --action-fill above. */
+  background: var(--action-fill);
+  color: var(--action-ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--baseline) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--baseline);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--page-plane);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

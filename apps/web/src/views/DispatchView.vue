@@ -1,569 +1,1039 @@
 <script setup lang="ts">
-/**
- * Screen 1 — This Month's Dispatch List. The landing screen.
- *
- * PRD v2 section 4: a fleet map on the left, a ranked list on the right, and a
- * footer carrying visits avoided and estimated saving. The footer is not a
- * footnote — "the product's value is as much in the sites you don't visit as the
- * ones you do" — so it gets real visual weight.
- *
- * The map is a correctly-sized placeholder for now. When Leaflet lands, the five
- * Agassi sites share byte-identical coordinates and will stack: use
- * markercluster and let it spiderfy. Never jitter coordinates to fake separation.
- */
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { loadDispatch, sitesByStatus, formatRinggit, formatCapacity } from '@/services/api'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  ChevronRight,
+  CircleCheck,
+  CircleSlash,
+  Clock3,
+  Diamond,
+  List,
+  Map,
+  RefreshCw,
+  TriangleAlert,
+} from '@lucide/vue'
+import {
+  formatCapacity,
+  formatRinggit,
+  isAssessed,
+  loadDispatch,
+  sitesByStatus,
+  sitesNotAssessed,
+} from '@/services/api'
 import type { Dispatch, Site, SiteStatus } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import FleetMap from '@/components/FleetMap.vue'
+import type { MapViewMode } from '@/components/fleetBasemap'
+import NoticeCallout from '@/components/NoticeCallout.vue'
+import DemoGuide from '@/components/DemoGuide.vue'
 
 const router = useRouter()
-
-/** Highlighted site, shared between the list and the map in both directions. */
-const activeSiteId = ref<string | null>(null)
-
-function openSite(siteId: string): void {
-  router.push({ name: 'site-detail', params: { siteId } })
-}
-
+const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
 const source = ref<'primary' | 'fallback' | null>(null)
 const loadError = ref<string | null>(null)
 const isLoading = ref(true)
+const activeSiteId = ref<string | null>(null)
+const mobilePanel = ref<'map' | 'queue'>('map')
+const currentMapView = ref<MapViewMode>('map')
 
-onMounted(async () => {
+async function load(force = false): Promise<void> {
+  isLoading.value = true
+  loadError.value = null
   try {
-    const result = await loadDispatch()
+    const result = await loadDispatch(force)
     dispatch.value = result.dispatch
     source.value = result.source
+    const first = orderedAttentionSites.value[0]
+    if (!activeSiteId.value && first) activeSiteId.value = first.site_id
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : String(error)
   } finally {
     isLoading.value = false
   }
+}
+
+onMounted(() => {
+  const querySite = typeof route.query.site === 'string' ? route.query.site : null
+  const queryView = typeof route.query.view === 'string' ? route.query.view : null
+  if (querySite) activeSiteId.value = querySite
+  if (queryView === 'aerial' || queryView === '3d') currentMapView.value = queryView
+  load()
 })
 
-const GROUPS: Array<{ status: SiteStatus; heading: string; note: string }> = [
-  { status: 'dispatch', heading: 'Dispatch recommended', note: 'above the dispatch threshold' },
-  { status: 'monitor', heading: 'Monitor', note: 'deviation detected, below dispatch threshold' },
-  { status: 'healthy', heading: 'Healthy', note: 'within cohort tolerance' },
-]
-
-const groups = computed(() => {
-  if (!dispatch.value) return []
-  return GROUPS.map((group) => ({
-    ...group,
-    sites: sitesByStatus(dispatch.value as Dispatch, group.status),
-  }))
+watch([activeSiteId, currentMapView], ([site, view]) => {
+  router.replace({
+    query: {
+      ...route.query,
+      site: site || undefined,
+      view: view === 'map' ? undefined : view,
+    },
+  })
 })
 
 const summary = computed(() => dispatch.value?.fleet_summary ?? null)
 const meta = computed(() => dispatch.value?.meta ?? null)
+const dispatchSites = computed(() =>
+  dispatch.value ? sitesByStatus(dispatch.value, 'dispatch') : [],
+)
+const monitorSites = computed(() =>
+  dispatch.value ? sitesByStatus(dispatch.value, 'monitor') : [],
+)
+const healthySites = computed(() =>
+  dispatch.value ? sitesByStatus(dispatch.value, 'healthy') : [],
+)
+const unassessedSites = computed(() => (dispatch.value ? sitesNotAssessed(dispatch.value) : []))
+const orderedAttentionSites = computed(() => [...dispatchSites.value, ...monitorSites.value])
+const activeSite = computed(() =>
+  dispatch.value?.sites.find((site) => site.site_id === activeSiteId.value),
+)
+
+const headline = computed(() => {
+  const dispatchCount = dispatchSites.value.length
+  const monitorCount = monitorSites.value.length
+  if (dispatchCount > 0) {
+    return `${dispatchCount} ${dispatchCount === 1 ? 'site needs' : 'sites need'} a maintenance decision.`
+  }
+  if (monitorCount > 0) {
+    return `No trip is justified yet. ${monitorCount} ${monitorCount === 1 ? 'site is' : 'sites are'} on watch.`
+  }
+  return 'No site needs attention this month.'
+})
+
+const dispatchVerdict = computed(() => {
+  if (!dispatch.value || dispatchSites.value.length > 0) return null
+  const threshold = dispatch.value.assumptions.dispatch_threshold_rm_per_month
+  const nearest = dispatch.value.sites
+    .filter((site) => isAssessed(site) && site.economics)
+    .sort(
+      (a, b) => (b.economics?.rm_at_risk_monthly ?? 0) - (a.economics?.rm_at_risk_monthly ?? 0),
+    )[0]
+  return nearest
+    ? { threshold, nearest, shortfall: threshold - (nearest.economics?.rm_at_risk_monthly ?? 0) }
+    : null
+})
 
 function cohortLabel(site: Site): string {
-  const cohort = dispatch.value?.cohorts.find((item) => item.cohort_id === site.cohort_id)
-  return cohort?.label ?? 'Ungrouped'
+  return (
+    dispatch.value?.cohorts.find((cohort) => cohort.cohort_id === site.cohort_id)?.label ??
+    'Ungrouped'
+  )
 }
 
-function cohortBelowMinimum(site: Site): boolean {
-  const cohort = dispatch.value?.cohorts.find((item) => item.cohort_id === site.cohort_id)
-  return cohort ? !cohort.meets_minimum : false
+function openSite(siteId: string): void {
+  router.push({ name: 'site-detail', params: { siteId } })
 }
 
-/** Glyph pairs with the text label so status never rests on color alone. */
-const STATUS_GLYPH: Record<SiteStatus, string> = {
-  dispatch: '▲',
-  monitor: '◆',
-  healthy: '●',
+function selectSite(siteId: string): void {
+  activeSiteId.value = siteId
+}
+
+function reviewPriorities(): void {
+  mobilePanel.value = 'queue'
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('#priority-queue')?.focus())
+}
+
+function iconFor(status: SiteStatus) {
+  return status === 'dispatch' ? TriangleAlert : status === 'monitor' ? Diamond : CircleCheck
 }
 </script>
 
 <template>
-  <main class="screen">
-    <p v-if="isLoading" class="state">Loading dispatch…</p>
+  <main id="main-content" class="command" tabindex="-1">
+    <section v-if="isLoading" class="load-state" aria-live="polite">
+      <span class="load-state__pulse"></span>
+      <div>
+        <strong>Preparing fleet command</strong><span>Loading the latest dispatch artifact…</span>
+      </div>
+    </section>
 
-    <p v-else-if="loadError" class="state state--error">
-      Could not load dispatch data.<br />
-      <span class="state__detail">{{ loadError }}</span>
-    </p>
+    <section v-else-if="loadError" class="load-state load-state--error" role="alert">
+      <TriangleAlert :size="24" aria-hidden="true" />
+      <div>
+        <strong>Dispatch data could not be loaded</strong><span>{{ loadError }}</span>
+      </div>
+      <button type="button" @click="load(true)">
+        <RefreshCw :size="16" aria-hidden="true" /> Retry
+      </button>
+    </section>
 
     <template v-else-if="dispatch && summary && meta">
-      <header class="fleet-header">
+      <header id="fleet-decision" class="command-header">
         <div>
-          <p class="fleet-header__eyebrow">Fleet</p>
-          <h1 class="fleet-header__title">
-            {{ summary.site_count }} sites
-            <span class="fleet-header__divider">·</span>
-            {{ summary.total_capacity_mwp }} MWp
-            <span class="fleet-header__divider">·</span>
-            {{ summary.cohort_count }} cohorts
-          </h1>
+          <p class="command-header__month">{{ meta.reporting_month_label }} fleet decision</p>
+          <h1>{{ headline }}</h1>
+          <p class="command-header__summary">
+            {{ summary.site_count }} sites across {{ summary.cohort_count }} climate cohorts ·
+            {{ summary.total_capacity_mwp }} MWp under review
+          </p>
         </div>
-        <div class="fleet-header__right">
-          <p class="fleet-header__month">{{ meta.reporting_month_label }}</p>
-          <DataStatusBadge :status="meta.data_status" />
+        <div class="command-header__actions">
+          <span class="freshness"
+            ><span></span> Pipeline {{ meta.pipeline_version }} ·
+            {{ meta.data_status.toLowerCase() }}</span
+          >
+          <button type="button" class="primary-action" @click="reviewPriorities">
+            Review priorities <ArrowUpRight :size="17" aria-hidden="true" />
+          </button>
         </div>
       </header>
 
-      <p v-if="source === 'fallback'" class="notice">
-        Serving the committed fallback copy — the primary source was unreachable.
-      </p>
+      <NoticeCallout v-if="source === 'fallback'" tone="warning" compact class="notice">
+        The live source is unavailable. You are viewing the committed fallback artifact.
+      </NoticeCallout>
 
-      <div class="layout">
-        <aside class="map-column">
+      <section id="fleet-signals" class="signal-strip" aria-label="Fleet summary">
+        <article class="signal signal--primary">
+          <span>Monthly value at risk</span>
+          <strong>{{ formatRinggit(summary.total_rm_at_risk) }}</strong>
+          <small>Across measured flagged sites</small>
+        </article>
+        <article class="signal">
+          <span>Dispatch</span><strong>{{ summary.dispatch_count }}</strong
+          ><small>Trips worth reviewing</small>
+        </article>
+        <article class="signal">
+          <span>On watch</span><strong>{{ summary.monitor_count }}</strong
+          ><small>Below dispatch threshold</small>
+        </article>
+        <article class="signal signal--healthy">
+          <span>Cleared</span><strong>{{ summary.healthy_count }}</strong
+          ><small>Assessed as healthy</small>
+        </article>
+      </section>
+
+      <div class="mobile-switch" role="group" aria-label="Fleet workspace view">
+        <button
+          type="button"
+          :aria-pressed="mobilePanel === 'map'"
+          :class="{ active: mobilePanel === 'map' }"
+          @click="mobilePanel = 'map'"
+        >
+          <Map :size="16" aria-hidden="true" /> Map
+        </button>
+        <button
+          type="button"
+          :aria-pressed="mobilePanel === 'queue'"
+          :class="{ active: mobilePanel === 'queue' }"
+          @click="mobilePanel = 'queue'"
+        >
+          <List :size="16" aria-hidden="true" /> Priority list
+        </button>
+      </div>
+
+      <section class="workspace" aria-label="Fleet dispatch workspace">
+        <div
+          id="spatial-workspace"
+          class="spatial-panel"
+          :class="{ 'mobile-hidden': mobilePanel !== 'map' }"
+        >
+          <div class="panel-heading">
+            <div>
+              <h2>Fleet risk landscape</h2>
+              <p>Geography, status, and economic exposure in one view.</p>
+            </div>
+            <span class="view-readout">{{
+              currentMapView === '3d'
+                ? '3D economic risk'
+                : currentMapView === 'aerial'
+                  ? 'Aerial evidence'
+                  : '2D fleet context'
+            }}</span>
+          </div>
           <FleetMap
             :sites="dispatch.sites"
             :active-site-id="activeSiteId"
-            @select="activeSiteId = $event"
+            :initial-view="currentMapView"
+            @select="selectSite"
+            @view-change="currentMapView = $event"
           />
-        </aside>
-
-        <section class="list">
-          <section v-for="group in groups" :key="group.status" class="group">
-            <h2 class="group__heading">
-              <span class="group__glyph" :class="`group__glyph--${group.status}`" aria-hidden="true">
-                {{ STATUS_GLYPH[group.status] }}
-              </span>
-              {{ group.heading }}
-              <span class="group__count">({{ group.sites.length }})</span>
-              <span class="group__note">— {{ group.note }}</span>
-            </h2>
-
-            <p v-if="!group.sites.length" class="group__empty">No sites in this group.</p>
-
-            <ol v-else class="rows">
-              <li
-                v-for="site in group.sites"
-                :key="site.site_id"
-                class="row"
-                :class="{ 'row--active': site.site_id === activeSiteId }"
-                tabindex="0"
-                role="button"
-                @mouseenter="activeSiteId = site.site_id"
-                @focus="activeSiteId = site.site_id"
-                @click="openSite(site.site_id)"
-                @keydown.enter="openSite(site.site_id)"
+          <div v-if="activeSite" class="selection-brief" aria-live="polite">
+            <div
+              class="selection-brief__status"
+              :class="`selection-brief__status--${activeSite.status}`"
+            >
+              <component :is="iconFor(activeSite.status)" :size="18" aria-hidden="true" />
+            </div>
+            <div class="selection-brief__identity">
+              <span>Selected site</span><strong>{{ activeSite.name }}</strong>
+              <small
+                >{{ formatCapacity(activeSite.capacity_kwp) }} ·
+                {{ cohortLabel(activeSite) }}</small
               >
-                <span class="row__rank">{{ site.rank ?? '—' }}</span>
+            </div>
+            <div class="selection-brief__value">
+              <span>At risk</span
+              ><strong>{{
+                activeSite.economics
+                  ? formatRinggit(activeSite.economics.rm_at_risk_monthly)
+                  : 'Not assessed'
+              }}</strong>
+            </div>
+            <button type="button" @click="openSite(activeSite.site_id)">
+              Evidence <ChevronRight :size="16" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
 
-                <span class="row__identity">
-                  <span class="row__name">{{ site.name }}</span>
-                  <span class="row__meta">
-                    {{ formatCapacity(site.capacity_kwp) }}
-                    <span class="row__divider">·</span>
-                    {{ site.address }}
-                    <span class="row__divider">·</span>
-                    {{ cohortLabel(site) }}
-                    <span v-if="cohortBelowMinimum(site)" class="row__caution" title="Cohort is below the minimum size — peer comparison is weak here">
-                      ⚠ cohort below minimum
-                    </span>
-                    <span
-                      v-if="site.excluded_from_analysis"
-                      class="row__excluded"
-                      :title="site.excluded_from_analysis.detail"
+        <aside
+          id="priority-queue"
+          class="priority-panel"
+          :class="{ 'mobile-hidden': mobilePanel !== 'queue' }"
+          tabindex="-1"
+        >
+          <div class="panel-heading">
+            <div>
+              <h2>Priority queue</h2>
+              <p>Ranked by the pipeline, with the reason visible.</p>
+            </div>
+            <DataStatusBadge :status="meta.data_status" small />
+          </div>
+
+          <div v-if="dispatchVerdict" class="threshold-verdict">
+            <CheckCircle2 :size="19" aria-hidden="true" />
+            <div>
+              <strong>No site clears {{ formatRinggit(dispatchVerdict.threshold) }}/month.</strong>
+              <span
+                >{{ dispatchVerdict.nearest.name }} is closest, still
+                {{ formatRinggit(dispatchVerdict.shortfall) }} short of justifying a trip.</span
+              >
+            </div>
+          </div>
+
+          <ol v-if="orderedAttentionSites.length" class="priority-list">
+            <li v-for="site in orderedAttentionSites" :key="site.site_id">
+              <button
+                type="button"
+                class="priority-card"
+                :class="[
+                  `priority-card--${site.status}`,
+                  { active: site.site_id === activeSiteId },
+                ]"
+                @click="selectSite(site.site_id)"
+                @dblclick="openSite(site.site_id)"
+              >
+                <span class="priority-card__rank">{{
+                  String(site.rank ?? '—').padStart(2, '0')
+                }}</span>
+                <span class="priority-card__main">
+                  <span class="priority-card__topline">
+                    <strong>{{ site.name }}</strong>
+                    <span>{{
+                      site.economics ? formatRinggit(site.economics.rm_at_risk_monthly) : '—'
+                    }}</span>
+                  </span>
+                  <span class="priority-card__reason">{{
+                    site.hypothesis?.summary ?? 'Performance diverges from the fleet reference.'
+                  }}</span>
+                  <span class="priority-card__meta">
+                    <component :is="iconFor(site.status)" :size="13" aria-hidden="true" />
+                    {{ site.status }}
+                    <span v-if="site.divergence"
+                      ><Clock3 :size="12" aria-hidden="true" />
+                      {{ site.divergence.days_since }} days</span
                     >
-                      ⊘ excluded — {{ site.excluded_from_analysis.reason.replace('_', ' ') }}
-                    </span>
-                  </span>
-                  <span v-if="site.hypothesis" class="row__hypothesis">
-                    {{ site.hypothesis.summary }}
+                    <span>{{ cohortLabel(site) }}</span>
                   </span>
                 </span>
+                <ChevronRight :size="18" aria-hidden="true" />
+              </button>
+            </li>
+          </ol>
+          <div v-else class="all-clear">
+            <CircleCheck :size="22" aria-hidden="true" /><strong>Fleet clear</strong>
+            <span>No assessed site requires attention this month.</span>
+          </div>
 
-                <span class="row__money">
-                  <template v-if="site.economics">
-                    <span class="row__rm">{{ formatRinggit(site.economics.rm_at_risk_monthly) }}</span>
-                    <span class="row__rm-unit">/mo at risk</span>
-                  </template>
-                  <span v-else class="row__rm-none">—</span>
-                </span>
-
-                <span class="row__days">
-                  <template v-if="site.divergence">
-                    <span class="row__days-value">▲ {{ site.divergence.days_since }}</span>
-                    <span class="row__days-unit">days</span>
-                  </template>
-                </span>
-
-                <span class="row__badge">
-                  <DataStatusBadge :status="site.data_status" small />
-                </span>
+          <details class="healthy-summary">
+            <summary>
+              <span
+                ><CircleCheck :size="17" aria-hidden="true" /><strong
+                  >{{ healthySites.length }} healthy sites</strong
+                ></span
+              >
+              <span>No visit recommended</span>
+            </summary>
+            <ul>
+              <li v-for="site in healthySites" :key="site.site_id">
+                <button type="button" @click="selectSite(site.site_id)">
+                  {{ site.name }}<span>{{ formatCapacity(site.capacity_kwp) }}</span>
+                </button>
               </li>
-            </ol>
-          </section>
+            </ul>
+          </details>
 
-          <!-- The claim the product rests on. Deliberately given weight. -->
-          <footer class="outcome">
-            <div class="outcome__tile">
-              <p class="outcome__value">{{ summary.visits_avoided }}</p>
-              <p class="outcome__label">sites not visited this month</p>
-            </div>
-            <div class="outcome__tile">
-              <p class="outcome__value">{{ formatRinggit(summary.estimated_saving_rm) }}</p>
-              <!--
-                Sites and ringgit have different denominators: co-located sites
-                are one mobilisation, so the saving is per TRIP. Showing the
-                site count beside the money without this line implies a
-                per-site cost that was never charged.
-              -->
-              <p class="outcome__label">
-                estimated saving — {{ summary.trips_avoided }} site trips avoided
-              </p>
-            </div>
-            <div class="outcome__tile outcome__tile--secondary">
-              <p class="outcome__value outcome__value--small">
-                {{ formatRinggit(summary.total_rm_at_risk) }}
-              </p>
-              <p class="outcome__label">total at risk across flagged sites</p>
-            </div>
-          </footer>
-        </section>
-      </div>
+          <details v-if="unassessedSites.length" class="healthy-summary healthy-summary--muted">
+            <summary>
+              <span
+                ><CircleSlash :size="17" aria-hidden="true" /><strong
+                  >{{ unassessedSites.length }} not assessed</strong
+                ></span
+              ><span>Data quality exclusion</span>
+            </summary>
+            <ul>
+              <li v-for="site in unassessedSites" :key="site.site_id">
+                <button type="button" @click="selectSite(site.site_id)">
+                  {{ site.name
+                  }}<span>{{ site.excluded_from_analysis?.reason.replace('_', ' ') }}</span>
+                </button>
+              </li>
+            </ul>
+          </details>
+        </aside>
+      </section>
+
+      <section id="fleet-outcome" class="fleet-outcome" aria-label="Operational outcome">
+        <div>
+          <span>Sites kept off the road</span><strong>{{ summary.visits_avoided }}</strong
+          ><small>{{ summary.trips_avoided }} unnecessary site trips avoided</small>
+        </div>
+        <div>
+          <span>Mobilisation budget retained</span
+          ><strong>{{ formatRinggit(summary.estimated_saving_rm) }}</strong
+          ><small>Estimated from avoided trips, not avoided sites</small>
+        </div>
+        <p>The product's value is also in the visits it confidently recommends against.</p>
+      </section>
 
       <footer class="provenance">
-        <p>{{ meta.data_source }} · irradiance: {{ meta.irradiance_source }} · {{ meta.source_note }}</p>
-        <p v-if="meta.date_remapped">{{ meta.date_remap_note }}</p>
-        <p class="provenance__generated">
-          Generated {{ meta.generated_at }} · pipeline {{ meta.pipeline_version }} · schema
-          {{ meta.schema_version }}
+        <p>
+          {{ meta.data_source }} · irradiance: {{ meta.irradiance_source }} · {{ meta.source_note }}
         </p>
+        <p v-if="meta.date_remapped">{{ meta.date_remap_note }}</p>
+        <p>Generated {{ meta.generated_at }} · schema {{ meta.schema_version }}</p>
       </footer>
+      <DemoGuide />
     </template>
   </main>
 </template>
 
 <style scoped>
-.screen {
-  max-width: 1280px;
+.command {
+  width: min(100%, 1600px);
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
-}
-
-.state {
-  padding: 3rem 0;
-  color: var(--text-secondary);
-}
-
-.state--error {
-  color: var(--status-critical);
-}
-
-.state__detail {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-/* --- Header --- */
-
-.fleet-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-hairline);
-}
-
-.fleet-header__eyebrow {
-  margin: 0 0 0.2rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.fleet-header__title {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.fleet-header__divider {
-  color: var(--text-muted);
-  margin: 0 0.3rem;
-  font-weight: 400;
-}
-
-.fleet-header__right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.4rem;
-}
-
-.fleet-header__month {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--text-secondary);
-}
-
-.notice {
-  margin: 1rem 0 0;
-  padding: 0.6rem 0.8rem;
-  border-left: 3px solid var(--status-warning);
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
-/* --- Layout --- */
-
-.layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 420px) 1fr;
-  gap: 1.5rem;
-  margin-top: 1.5rem;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.map-column {
-  position: sticky;
-  top: 1.5rem;
-}
-
-@media (max-width: 900px) {
-  .map-column {
-    position: static;
-  }
-}
-
-/* --- Groups --- */
-
-.group {
-  margin-bottom: 2rem;
-}
-
-.group__heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.45rem;
-  margin: 0 0 0.6rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.group__glyph--dispatch {
-  color: var(--status-critical);
-}
-.group__glyph--monitor {
-  color: var(--status-warning);
-}
-.group__glyph--healthy {
-  color: var(--status-good);
-}
-
-.group__count {
-  color: var(--text-secondary);
-}
-
-.group__note {
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.group__empty {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-/* --- Rows --- */
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 2rem 1fr auto auto auto;
-  gap: 0.9rem;
-  align-items: center;
-  padding: 0.7rem 0.9rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: border-color 120ms ease;
-}
-
-.row:hover,
-.row--active,
-.row:focus-visible {
-  border-color: var(--text-muted);
+  padding: clamp(1.25rem, 2.8vw, 2.75rem);
   outline: none;
 }
-
-@media (max-width: 720px) {
-  .row {
-    grid-template-columns: 1.6rem 1fr;
-    row-gap: 0.4rem;
-  }
-  .row__money,
-  .row__days,
-  .row__badge {
-    grid-column: 2;
-    justify-self: start;
-  }
+.load-state {
+  display: flex;
+  min-height: 60vh;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: var(--text-secondary);
 }
-
-.row__rank {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.row__identity {
+.load-state div {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
+  gap: 0.2rem;
 }
-
-.row__name {
-  font-weight: 600;
-  font-size: 0.95rem;
+.load-state strong {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
 }
-
-.row__meta {
-  font-size: 0.78rem;
-  color: var(--text-muted);
+.load-state span {
+  font-size: 0.85rem;
 }
-
-.row__divider {
-  margin: 0 0.25rem;
+.load-state__pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--signal-live);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--signal-live) 16%, transparent);
+  animation: pulse 1.6s var(--ease-out) infinite;
 }
-
-.row__caution {
-  color: var(--status-serious);
-  margin-left: 0.3rem;
-  font-weight: 600;
+.load-state--error {
+  flex-wrap: wrap;
+  color: var(--status-critical);
 }
-
-/* Not a triage state — a statement that this site is not being judged at all. */
-.row__excluded {
-  color: var(--text-secondary);
-  margin-left: 0.3rem;
-  font-weight: 600;
-  border-bottom: 1px dotted currentColor;
-  cursor: help;
+.load-state--error button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
 }
-
-.row__hypothesis {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  margin-top: 0.15rem;
+.command-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
 }
-
-.row__money {
-  text-align: right;
-  white-space: nowrap;
+.command-header__month {
+  margin: 0 0 0.45rem;
+  color: var(--action-text);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-
-.row__rm {
-  font-weight: 700;
-  font-size: 1rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.row__rm-unit,
-.row__days-unit {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.row__rm-none {
-  color: var(--text-muted);
-}
-
-.row__days {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.row__days-value {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- Outcome footer — the product's core claim --- */
-
-.outcome {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1px;
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 2px solid var(--text-primary);
-}
-
-.outcome__tile {
-  padding: 0.5rem 1rem 0.5rem 0;
-}
-
-.outcome__value {
+.command-header h1 {
+  max-width: 18ch;
   margin: 0;
-  font-size: 2.4rem;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-size: clamp(2rem, 4vw, 4.35rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+  text-wrap: balance;
 }
-
-.outcome__value--small {
-  font-size: 1.6rem;
+.command-header__summary {
+  margin: 0.9rem 0 0;
   color: var(--text-secondary);
+  font-size: 0.9rem;
 }
-
-.outcome__label {
-  margin: 0.3rem 0 0;
-  font-size: 0.78rem;
+.command-header__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.freshness {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   color: var(--text-muted);
+  font-size: 0.72rem;
 }
-
-.outcome__tile--secondary {
-  align-self: end;
+.freshness > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal-live);
 }
-
-/* --- Provenance --- */
-
+.primary-action {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0 1.15rem;
+  background: var(--action-fill);
+  color: var(--action-ink);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: 700 0.83rem var(--font-display);
+  cursor: pointer;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--action-fill) 20%, transparent);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.primary-action:active {
+  transform: scale(0.97);
+}
+.notice {
+  margin-top: 1rem;
+}
+.signal-strip {
+  display: grid;
+  grid-template-columns: 1.45fr repeat(3, minmax(0, 0.72fr));
+  gap: 1px;
+  margin-top: 2rem;
+  overflow: hidden;
+  background: var(--border-hairline);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+}
+.signal {
+  display: flex;
+  min-height: 7.3rem;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1rem 1.15rem;
+  background: var(--surface-1);
+}
+.signal span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+.signal strong {
+  margin-top: auto;
+  font: 650 clamp(1.6rem, 3vw, 2.7rem)/1 var(--font-display);
+  letter-spacing: -0.035em;
+}
+.signal small {
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+.signal--primary {
+  background: var(--surface-emphasis);
+}
+.signal--primary strong {
+  color: var(--status-critical);
+}
+.signal--healthy strong {
+  color: var(--success-text);
+}
+.mobile-switch {
+  display: none;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.78fr);
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: start;
+}
+.spatial-panel,
+.priority-panel {
+  min-width: 0;
+  padding: 1rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+}
+.panel-heading {
+  display: flex;
+  min-height: 3.2rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+.panel-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.panel-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.view-readout {
+  padding: 0.4rem 0.55rem;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.selection-brief {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.85rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+.selection-brief__status {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 10px;
+}
+.selection-brief__status--dispatch {
+  color: var(--status-critical);
+  background: var(--callout-critical-bg);
+}
+.selection-brief__status--monitor {
+  color: var(--status-warning);
+  background: var(--callout-warning-bg);
+}
+.selection-brief__status--healthy {
+  color: var(--status-good);
+  background: var(--callout-good-bg);
+}
+.selection-brief__identity,
+.selection-brief__value {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.selection-brief span {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.selection-brief strong {
+  overflow: hidden;
+  font-size: 0.83rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selection-brief small {
+  color: var(--text-muted);
+  font-size: 0.67rem;
+}
+.selection-brief__value {
+  text-align: right;
+}
+.selection-brief button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.65rem;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font: 650 0.72rem var(--font-display);
+  cursor: pointer;
+}
+.priority-panel {
+  max-height: 720px;
+  overflow: auto;
+}
+.threshold-verdict {
+  display: flex;
+  gap: 0.7rem;
+  margin-bottom: 0.7rem;
+  padding: 0.75rem;
+  color: var(--success-text);
+  background: var(--callout-good-bg);
+  border: 1px solid var(--callout-good-border);
+  border-radius: var(--radius-md);
+}
+.threshold-verdict svg {
+  flex: none;
+}
+.threshold-verdict div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.threshold-verdict strong {
+  font-size: 0.76rem;
+}
+.threshold-verdict span {
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+.priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.priority-card {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.85rem;
+  color: var(--text-primary);
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.priority-card:hover,
+.priority-card.active {
+  background: var(--surface-selected);
+  border-color: var(--action-text);
+}
+.priority-card__rank {
+  align-self: start;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+.priority-card__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.38rem;
+}
+.priority-card__topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.priority-card__topline strong {
+  font-size: 0.83rem;
+}
+.priority-card__topline > span {
+  font-size: 0.8rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.priority-card--dispatch .priority-card__topline > span {
+  color: var(--status-critical);
+}
+.priority-card__reason {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.priority-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.63rem;
+  text-transform: capitalize;
+}
+.priority-card__meta > span,
+.priority-card__meta {
+  display: flex;
+  align-items: center;
+}
+.priority-card__meta > span {
+  gap: 0.18rem;
+}
+.all-clear {
+  display: flex;
+  min-height: 10rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--success-text);
+  text-align: center;
+}
+.all-clear span {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.healthy-summary {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--border-hairline);
+}
+.healthy-summary summary {
+  display: flex;
+  min-height: 3.35rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+.healthy-summary summary > span {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.healthy-summary summary strong {
+  color: var(--text-primary);
+  font-size: 0.76rem;
+}
+.healthy-summary ul {
+  margin: 0;
+  padding: 0 0 0.5rem;
+  list-style: none;
+}
+.healthy-summary li + li {
+  border-top: 1px solid var(--border-hairline);
+}
+.healthy-summary li button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.25rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.healthy-summary li button span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+.healthy-summary--muted {
+  opacity: 0.8;
+}
+.fleet-outcome {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr minmax(250px, 1fr);
+  gap: 1px;
+  margin-top: 1rem;
+  overflow: hidden;
+  background: var(--border-hairline);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+}
+.fleet-outcome > div,
+.fleet-outcome > p {
+  margin: 0;
+  padding: 1.1rem;
+  background: var(--surface-1);
+}
+.fleet-outcome > div {
+  display: flex;
+  flex-direction: column;
+}
+.fleet-outcome span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+.fleet-outcome strong {
+  margin: 0.35rem 0;
+  font: 650 1.8rem/1 var(--font-display);
+  color: var(--action-text);
+}
+.fleet-outcome small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+.fleet-outcome p {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font: 500 0.85rem/1.5 var(--font-display);
+}
 .provenance {
-  margin-top: 3rem;
+  margin-top: 1.25rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border-hairline);
-  font-size: 0.75rem;
-  line-height: 1.6;
   color: var(--text-muted);
+  font-size: 0.63rem;
+  line-height: 1.5;
 }
-
 .provenance p {
-  margin: 0 0 0.3rem;
+  margin: 0.15rem 0;
 }
-
-.provenance__generated {
-  font-variant-numeric: tabular-nums;
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+    transform: scale(0.84);
+  }
+}
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .priority-panel {
+    max-height: none;
+  }
+  .command-header h1 {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+  }
+}
+@media (max-width: 760px) {
+  .command {
+    padding: 1rem;
+    overflow: hidden;
+  }
+  .command-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .command-header > div:first-child {
+    min-width: 0;
+  }
+  .command-header h1 {
+    max-width: 12ch;
+  }
+  .command-header__summary {
+    max-width: 34ch;
+    line-height: 1.5;
+  }
+  .command-header__actions {
+    width: 100%;
+    align-items: stretch;
+  }
+  .freshness {
+    order: 2;
+    flex-wrap: wrap;
+  }
+  .primary-action {
+    width: 100%;
+  }
+  .signal-strip {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .signal {
+    min-width: 0;
+    min-height: 6.2rem;
+    padding: 0.9rem;
+  }
+  .signal strong {
+    font-size: clamp(1.45rem, 9vw, 2.2rem);
+  }
+  .mobile-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    margin-top: 1rem;
+    padding: 0.25rem;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+  }
+  .mobile-switch button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 0;
+    border-radius: calc(var(--radius-md) - 2px);
+    font: 650 0.76rem var(--font-display);
+  }
+  .mobile-switch button.active {
+    color: var(--text-primary);
+    background: var(--surface-1);
+    box-shadow: var(--elevation-1);
+  }
+  .workspace {
+    min-width: 0;
+    margin-top: 0.55rem;
+  }
+  .mobile-hidden {
+    display: none;
+  }
+  .spatial-panel,
+  .priority-panel {
+    min-width: 0;
+    padding: 0.75rem;
+  }
+  .panel-heading .view-readout {
+    display: none;
+  }
+  .selection-brief {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .selection-brief__value {
+    display: none;
+  }
+  .fleet-outcome {
+    grid-template-columns: 1fr;
+  }
+  .fleet-outcome p {
+    min-height: 5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .load-state__pulse {
+    animation: fade 200ms var(--ease-out) infinite alternate;
+  }
+  .primary-action:active {
+    transform: none;
+  }
 }
 </style>

@@ -1,0 +1,48 @@
+<style>
+  .direction-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:22px}
+  .direction{border:1px solid #d8d8d2;border-radius:18px;overflow:hidden;background:#fff;cursor:pointer;transition:.2s ease;box-shadow:0 12px 30px rgba(18,25,21,.06)}
+  .direction:hover{transform:translateY(-3px);box-shadow:0 18px 38px rgba(18,25,21,.12)}
+  .direction.selected{outline:3px solid #46c989;outline-offset:2px}
+  .screen{height:330px;background:#07100d;color:#eaf5ef;padding:12px;font:10px/1.25 system-ui;position:relative}
+  .top{display:flex;align-items:center;justify-content:space-between;height:28px;border-bottom:1px solid #26362f}.brand{font-weight:800;letter-spacing:.08em}.live{color:#64e5a4}
+  .pill{border:1px solid #33483e;border-radius:999px;padding:4px 7px;color:#9bb0a5}.red{color:#ff786f}.amber{color:#ffc85e}.green{color:#64e5a4}
+  .mission{display:grid;grid-template-columns:1.5fr .9fr;gap:8px;height:280px;padding-top:8px}.map{position:relative;border-radius:10px;overflow:hidden;background:radial-gradient(circle at 68% 46%,#1b4734 0 2%,transparent 3%),radial-gradient(circle at 43% 58%,#b24039 0 2%,transparent 3%),linear-gradient(145deg,#10231b,#0a1712)}
+  .map:before{content:"";position:absolute;inset:12%;border:1px solid #315343;border-radius:46% 54% 52% 48%;transform:rotate(-8deg);box-shadow:0 0 60px #183b2c inset}.beam{position:absolute;width:10px;height:80px;left:43%;bottom:37%;background:linear-gradient(#ff746a,#7a2723);transform:skewY(-25deg);box-shadow:0 0 24px #ff5d52}.beam.two{left:68%;height:48px;background:linear-gradient(#ffc85e,#6f4d16)}
+  .maplabel{position:absolute;left:12px;bottom:11px;color:#a8bbb1}.queue{display:flex;flex-direction:column;gap:7px}.qhead{font-size:14px;font-weight:750;margin:3px 0}.row{padding:9px;border:1px solid #253a30;border-radius:9px;background:#0d1a15}.row strong{display:block;font-size:11px}.row span{color:#8fa59a}.row.hot{border-color:#713932;background:#1c1513}
+  .canvas{height:280px;margin-top:8px;border-radius:12px;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 80%,#1e4c37 0,#0d1d16 52%,#07100d 72%)}.canvas .beam{left:34%;bottom:27%;height:130px}.canvas .beam.two{left:62%;height:72px}.floating{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between}.sheet{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(9,18,14,.92);border:1px solid #344a3f;border-radius:12px;padding:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.metric b{font-size:16px;display:block}.metric span{color:#8fa59a}
+  .cockpit{padding-top:8px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.metric-card{border:1px solid #263930;border-radius:9px;padding:9px}.metric-card b{font-size:16px;display:block}.lower{display:grid;grid-template-columns:1fr 1.2fr;gap:8px;margin-top:8px;height:205px}.mini-map{border-radius:9px;background:radial-gradient(circle at 35% 48%,#ff776e 0 2%,transparent 3%),radial-gradient(circle at 67% 64%,#ffc85e 0 2%,transparent 3%),linear-gradient(145deg,#10231b,#08140f)}.bars{display:flex;align-items:end;gap:7px;padding:22px 12px 12px;border:1px solid #263930;border-radius:9px}.bar{flex:1;background:#274737;border-radius:3px 3px 0 0}.bar:nth-child(3){background:#dc5d55}.bar:nth-child(5){background:#e3ad45}
+  .copy{padding:15px 16px 17px}.copy h3{margin:0 0 6px;font-size:17px}.copy p{margin:0;color:#5d645f;font-size:13px;line-height:1.45}.tag{display:inline-block;margin-top:10px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#19794d;font-weight:800}
+  @media(max-width:900px){.direction-grid{grid-template-columns:1fr}.screen{height:290px}}
+</style>
+
+<h2>Choose the operating layout</h2>
+<p class="subtitle">All three support the same real data and workflows. The difference is what the operator sees first—and how the 3D experience earns its place.</p>
+
+<div class="direction-grid">
+  <div class="direction" data-choice="mission-control" onclick="toggleSelect(this)">
+    <div class="screen">
+      <div class="top"><span class="brand">SOLARAX / DISPATCH</span><span class="pill"><span class="live">●</span> Fleet updated</span></div>
+      <div class="mission">
+        <div class="map"><div class="beam"></div><div class="beam two"></div><div class="maplabel">3D risk terrain · drag to orbit</div></div>
+        <div class="queue"><div class="qhead">Needs attention</div><div class="row hot"><strong>Agassi 26 · Dispatch</strong><span>RM 1,237/mo at risk</span></div><div class="row"><strong>Site 02 · Monitor</strong><span>Peer divergence rising</span></div><div class="row"><strong>9 sites healthy</strong><span>No visit recommended</span></div></div>
+      </div>
+    </div>
+    <div class="copy"><h3>A — Mission Control Split</h3><p>3D fleet map and ranked action queue share the first viewport. Fastest path from “what changed?” to site evidence.</p><span class="tag">Recommended · operator-first + demo-ready</span></div>
+  </div>
+
+  <div class="direction" data-choice="spatial-canvas" onclick="toggleSelect(this)">
+    <div class="screen">
+      <div class="top"><span class="brand">SOLARAX / FLEET</span><span class="pill">Map · 3D</span></div>
+      <div class="canvas"><div class="beam"></div><div class="beam two"></div><div class="floating"><span class="pill">11 sites · 2 cohorts</span><span class="pill">Tilt 48°</span></div><div class="sheet"><div class="metric"><b class="red">2</b><span>Need action</span></div><div class="metric"><b>RM 1.7k</b><span>Monthly risk</span></div><div class="metric"><b class="green">82%</b><span>Healthy fleet</span></div></div></div>
+    </div>
+    <div class="copy"><h3>B — Spatial Fleet Canvas</h3><p>The 3D risk landscape becomes the product stage, with details in floating sheets. Strongest spectacle, slower for repetitive scanning.</p><span class="tag">Maximum wow · presentation-led</span></div>
+  </div>
+
+  <div class="direction" data-choice="operations-cockpit" onclick="toggleSelect(this)">
+    <div class="screen">
+      <div class="top"><span class="brand">SOLARAX / OVERVIEW</span><span class="pill">Aug 2026</span></div>
+      <div class="cockpit"><div class="metrics"><div class="metric-card"><b class="red">2</b>Dispatch</div><div class="metric-card"><b>RM 1.7k</b>At risk</div><div class="metric-card"><b class="green">9</b>Healthy</div></div><div class="lower"><div class="mini-map"></div><div class="bars"><div class="bar" style="height:22%"></div><div class="bar" style="height:35%"></div><div class="bar" style="height:96%"></div><div class="bar" style="height:28%"></div><div class="bar" style="height:54%"></div><div class="bar" style="height:18%"></div></div></div></div>
+    </div>
+    <div class="copy"><h3>C — Operations Cockpit</h3><p>KPIs, compact map, and trends lead. Familiar and efficient for experienced operators, but less distinctive for judges.</p><span class="tag">Dense & practical · conventional</span></div>
+  </div>
+</div>
