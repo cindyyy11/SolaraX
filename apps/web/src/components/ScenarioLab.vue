@@ -41,6 +41,7 @@ function reset() { selectScenario() }
           <optgroup label="Revenue loss"><option v-for="item in scenarioDefinitions.filter((s) => s.group === 'revenue')" :key="item.id" :value="item.id">{{ item.title }}</option></optgroup>
           <optgroup label="Inspection and safety"><option v-for="item in scenarioDefinitions.filter((s) => s.group === 'inspection')" :key="item.id" :value="item.id">{{ item.title }}</option></optgroup>
           <optgroup label="Grid and environment"><option v-for="item in scenarioDefinitions.filter((s) => s.group === 'grid')" :key="item.id" :value="item.id">{{ item.title }}</option></optgroup>
+          <optgroup label="Cyber-physical readiness"><option v-for="item in scenarioDefinitions.filter((s) => s.group === 'security')" :key="item.id" :value="item.id">{{ item.title }}</option></optgroup>
         </select>
         <p class="lab__description">{{ scenario.description }}</p>
         <label for="severity">Severity <output>{{ severity }}%</output></label>

@@ -5,8 +5,9 @@ import type { ScenarioResult } from '@/types/scenario'
 import ScenarioLab from '@/components/ScenarioLab.vue'
 import SiteDigitalTwin from '@/components/SiteDigitalTwin.vue'
 import { inspectionRouteFor } from '@/services/inspectionRoutes'
+import { recordEvidenceEvent } from '@/services/evidenceTimeline'
 
-defineProps<{ site: Site }>()
+const props = defineProps<{ site: Site }>()
 
 const scenarioResult = ref<ScenarioResult>()
 const scenarioId = ref('')
@@ -23,6 +24,7 @@ function updateScenario(payload: { id: string; label: string; severity: number; 
   scenarioLabel.value = payload.label
   severity.value = payload.severity
   scenarioResult.value = payload.result
+  recordEvidenceEvent({ id:`${props.site.site_id}-scenario`, siteId:props.site.site_id, type:'scenario', timestamp:new Date().toISOString(), title:`Scenario applied: ${payload.label}`, detail:`${payload.severity}% severity projects ${payload.result.generationLossKwh.toLocaleString()} kWh loss and ${payload.result.responseLabel.toLowerCase()}.`, evidenceLevel:'simulated', confidence:payload.result.confidence, status:'simulated', sourceRef:`scenario:${payload.id}` })
 }
 
 function selectWaypoint(index: number) { activeWaypoint.value = index }

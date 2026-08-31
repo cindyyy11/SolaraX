@@ -16,6 +16,13 @@ describe('intervention optimizer', () => {
     expect(result[0]?.reasons).toHaveLength(4)
   })
 
+  it('exposes the score composition as points that sum to about the score (independent rounding, +/-1)', () => {
+    const result = optimizeInterventions(candidates, 1)
+    const top = result[0]!
+    const total = top.contributions.value + top.contributions.confidence + top.contributions.safety + top.contributions.effort
+    expect(Math.abs(total - Math.round(top.score * 100))).toBeLessThanOrEqual(1)
+  })
+
   it('does not mutate candidate inputs', () => {
     const snapshot = JSON.stringify(candidates)
     optimizeInterventions(candidates, 2)

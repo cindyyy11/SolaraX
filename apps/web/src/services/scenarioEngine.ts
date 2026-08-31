@@ -85,6 +85,18 @@ export const scenarioDefinitions: ScenarioDefinition[] = [
     parameters: sharedParameters(45, 4),
     run: (site, values) => result(site, 0.18, values, 'monitor', 'Monitor grid event and tariff context', 'grid', ['Curtailment is an illustrative scenario.', 'No live grid dispatch signal is connected.']),
   },
+  {
+    id: 'telemetry-dropout', title: 'Telemetry dropout', group: 'security',
+    description: 'Model a sensor or communications channel that stops updating without reporting a fault — the same shape as a real gap this pipeline has already hit in production data.',
+    parameters: sharedParameters(30, 3),
+    run: (site, values) => result(site, 0.14, values, 'verify', 'Verify the channel is live before trusting its last reading', 'telemetry', ['Illustrative confidence-loss factor: 14% at full severity.', 'No live security or communications telemetry is connected — see the Resilience screen’s integration readiness panel.']),
+  },
+  {
+    id: 'suspicious-control-pattern', title: 'Suspicious control pattern', group: 'security',
+    description: 'Model a commanded setpoint that does not match the reported device state — worth a human look, not an automatic verdict.',
+    parameters: sharedParameters(25, 2),
+    run: (site, values) => result(site, 0.1, values, 'escalate', 'Escalate for a control-layer audit before assuming a fault', 'telemetry', ['This is a readiness scenario, not attack detection.', 'A real classification needs paired command-and-acknowledgement logs from the control layer.']),
+  },
 ]
 
 export function scenarioById(id: string): ScenarioDefinition | undefined {
