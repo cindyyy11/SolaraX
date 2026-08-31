@@ -36,6 +36,7 @@ import PerformanceModel from '@/components/PerformanceModel.vue'
 import SiteComparison from '@/components/SiteComparison.vue'
 import SpatialOperations from '@/components/SpatialOperations.vue'
 import RecoveryTracker from '@/components/RecoveryTracker.vue'
+import EvidenceTimeline from '@/components/EvidenceTimeline.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -128,6 +129,7 @@ const cohort = computed(() => {
         <PerformanceModel :site="site" />
         <SpatialOperations :site="site" />
         <RecoveryTracker :site="site" />
+        <EvidenceTimeline :site="site" />
         <SiteComparison :subject="site" :sites="dispatch?.sites ?? []" />
 
         <!-- Block 1 — cohort chart, full width, above everything else. -->
