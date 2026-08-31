@@ -52,6 +52,47 @@ export interface RecoveryResult {
 }
 
 export type ResilienceCategory = 'generation' | 'equipment' | 'weather' | 'grid' | 'telemetry' | 'communications'
+export type ResilienceStatus = 'nominal' | 'watch' | 'exposed' | 'not-connected'
+export type ResilienceBasis = 'measured' | 'inferred' | 'not-connected'
+
+/** One resilience category's summary. `score` is only meaningful when
+ * `basis` is not `'not-connected'` — a category with no source telemetry
+ * reports its connection state, never a fabricated exposure number. */
+export interface ResilienceSignal {
+  category: ResilienceCategory
+  label: string
+  status: ResilienceStatus
+  basis: ResilienceBasis
+  score: number
+  headline: string
+  explanation: string
+  contributingSignals: string[]
+}
+
+export type IntegrationSystem = 'scada' | 'cmms' | 'weather' | 'drone' | 'erp' | 'grid' | 'security'
+export type IntegrationState = 'connected' | 'partial' | 'not-connected'
+
+export interface IntegrationReadiness {
+  system: IntegrationSystem
+  label: string
+  state: IntegrationState
+  detail: string
+  expectedContract: string
+}
+
+export type CyberPhysicalCategory = 'equipment-anomaly' | 'telemetry-fault' | 'grid-event' | 'suspicious-pattern'
+
+/** A named example within a cyber-physical category — always simulated.
+ * There is no live security telemetry in this product; see CLAUDE.md's
+ * anti-goal list and the closed-loop design spec's data boundaries. */
+export interface CyberPhysicalScenario {
+  id: string
+  category: CyberPhysicalCategory
+  categoryLabel: string
+  title: string
+  description: string
+  wouldRequire: string
+}
 
 export interface InterventionCandidate {
   siteId: string
@@ -63,9 +104,20 @@ export interface InterventionCandidate {
   travelEvidenceLevel: EvidenceLevel
 }
 
+/** The score's four weighted inputs, each already expressed as points out of
+ * its own share of 100 — sums to `score * 100`. Exists so a caller can draw
+ * the composition as a stacked bar instead of only reading it as prose. */
+export interface InterventionContributions {
+  value: number
+  confidence: number
+  safety: number
+  effort: number
+}
+
 export interface InterventionRecommendation extends InterventionCandidate {
   score: number
   rank: number
   decision: 'dispatch-now' | 'monitor'
   reasons: string[]
+  contributions: InterventionContributions
 }
