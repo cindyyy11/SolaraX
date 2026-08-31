@@ -146,7 +146,7 @@ const cohort = computed(() => {
         </section>
 
         <!-- Block 2 — explainability. Every flag answers "why" with a number AND a method name. -->
-        <section v-if="site.detection && site.economics && site.hypothesis" class="panel card">
+        <section v-if="site.detection && site.economics && site.hypothesis" class="panel card card--interactive">
           <h2 class="panel__heading">Why this site is flagged</h2>
           <p class="panel__summary">{{ site.hypothesis.summary }}</p>
           <p class="panel__detail">{{ site.hypothesis.detail }}</p>
@@ -256,6 +256,7 @@ const cohort = computed(() => {
   margin: 0;
   max-width: 26ch;
   font-size: clamp(2rem, 4vw, 3.7rem);
+  font-weight: 650;
   line-height: 1;
   letter-spacing: -0.04em;
   text-wrap: balance;

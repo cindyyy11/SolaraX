@@ -842,6 +842,11 @@ function printCard(): void {
   margin-left: 0;
 }
 
+/* Deliberately duplicates the global .card class's values rather than using
+   that class directly — this element is a print-document root, not a
+   browsable card, and must never pick up .card--interactive's hover-lift or
+   any future change to the shared class. Keep these four properties in sync
+   with layout.css's .card by hand if that class ever changes. */
 .card {
   padding: 1.75rem;
   background: var(--surface-1);
@@ -883,7 +888,7 @@ function printCard(): void {
 }
 
 .activity {
-  margin-top: 1.5rem;
+  margin-top: var(--space-lg);
   padding-top: 1.25rem;
   border-top: 1px solid var(--border-hairline);
 }
@@ -1216,7 +1221,7 @@ function printCard(): void {
 /* --- Rank context --- */
 
 .rank {
-  margin-top: 1.25rem;
+  margin-top: var(--space-lg);
 }
 
 .rank__list {
@@ -1282,7 +1287,7 @@ function printCard(): void {
 /* --- Trace --- */
 
 .trace {
-  margin-top: 1.25rem;
+  margin-top: var(--space-lg);
 }
 
 .trace__wrap {
