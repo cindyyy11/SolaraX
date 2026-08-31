@@ -237,44 +237,44 @@ const assumptionRows = computed(() => {
       </div>
 
       <section class="tiles">
-        <div class="tile tile--primary">
+        <div class="tile tile--primary stagger-in">
           <p class="tile__value">{{ headline.tripsAvoided }}</p>
           <p class="tile__label">site trips avoided this month</p>
         </div>
-        <div class="tile tile--primary">
+        <div class="tile tile--primary stagger-in">
           <p class="tile__value">{{ formatRinggit(headline.savingRm) }}</p>
           <p class="tile__label">estimated saving</p>
         </div>
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">{{ summary.trips_recommended }}</p>
           <p class="tile__label">site trips recommended</p>
         </div>
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">{{ formatRinggit(headline.atRiskRm) }}</p>
           <p class="tile__label">at risk across flagged sites</p>
         </div>
       </section>
 
       <section class="tiles tiles--secondary">
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">{{ roi.faults_confirmed }}</p>
           <p class="tile__label">faults confirmed</p>
           <p v-if="roi.faults_confirmed_basis" class="tile__basis">
             {{ roi.faults_confirmed_basis }}
           </p>
         </div>
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">
             {{ Math.round(headline.generationRecovered).toLocaleString('en-MY') }}
           </p>
           <p class="tile__label">kWh generation at risk</p>
           <p v-if="roi.generation_basis" class="tile__basis">{{ roi.generation_basis }}</p>
         </div>
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">{{ formatRinggit(headline.protectedRm) }}</p>
           <p class="tile__label">RM at risk this month</p>
         </div>
-        <div class="tile">
+        <div class="tile stagger-in">
           <p class="tile__value tile__value--small">{{ headline.co2eTonnes.toFixed(1) }}</p>
           <p class="tile__label">tCO₂e recoverable</p>
         </div>
@@ -588,6 +588,19 @@ const assumptionRows = computed(() => {
   border-top: 2px solid var(--text-primary);
 }
 
+.tiles .tile:nth-child(1) {
+  animation-delay: 0ms;
+}
+.tiles .tile:nth-child(2) {
+  animation-delay: 40ms;
+}
+.tiles .tile:nth-child(3) {
+  animation-delay: 80ms;
+}
+.tiles .tile:nth-child(4) {
+  animation-delay: 120ms;
+}
+
 .tiles--secondary {
   border-top: 1px solid var(--border-hairline);
   margin-top: 1.75rem;
@@ -613,6 +626,12 @@ const assumptionRows = computed(() => {
 /* Same rule as DispatchView's outcome footer: brand amber marks the two
    numbers that ARE the claim (trips avoided, money saved), and nothing else
    on the screen competes for it. */
+.tile--primary {
+  padding: 0.6rem 1rem 0.6rem 0.85rem;
+  background: var(--surface-selected);
+  border-radius: var(--radius-sm);
+}
+
 .tile--primary .tile__value {
   color: var(--action-text);
 }
