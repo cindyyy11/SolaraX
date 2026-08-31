@@ -185,20 +185,20 @@ function iconFor(status: SiteStatus) {
       </NoticeCallout>
 
       <section id="fleet-signals" class="signal-strip" aria-label="Fleet summary">
-        <article class="signal signal--primary">
+        <article class="signal signal--primary stagger-in">
           <span>Monthly value at risk</span>
           <strong>{{ formatRinggit(summary.total_rm_at_risk) }}</strong>
           <small>Across measured flagged sites</small>
         </article>
-        <article class="signal">
+        <article class="signal stagger-in">
           <span>Dispatch</span><strong>{{ summary.dispatch_count }}</strong
           ><small>Trips worth reviewing</small>
         </article>
-        <article class="signal">
+        <article class="signal stagger-in">
           <span>On watch</span><strong>{{ summary.monitor_count }}</strong
           ><small>Below dispatch threshold</small>
         </article>
-        <article class="signal signal--healthy">
+        <article class="signal signal--healthy stagger-in">
           <span>Cleared</span><strong>{{ summary.healthy_count }}</strong
           ><small>Assessed as healthy</small>
         </article>
@@ -303,7 +303,12 @@ function iconFor(status: SiteStatus) {
           </div>
 
           <ol v-if="orderedAttentionSites.length" class="priority-list">
-            <li v-for="site in orderedAttentionSites" :key="site.site_id">
+            <li
+              v-for="(site, index) in orderedAttentionSites"
+              :key="site.site_id"
+              class="stagger-in"
+              :style="{ animationDelay: `${Math.min(index, 8) * 30}ms` }"
+            >
               <button
                 type="button"
                 class="priority-card"
@@ -517,6 +522,18 @@ function iconFor(status: SiteStatus) {
   background: var(--border-hairline);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-lg);
+}
+.signal-strip .signal:nth-child(1) {
+  animation-delay: 0ms;
+}
+.signal-strip .signal:nth-child(2) {
+  animation-delay: 40ms;
+}
+.signal-strip .signal:nth-child(3) {
+  animation-delay: 80ms;
+}
+.signal-strip .signal:nth-child(4) {
+  animation-delay: 120ms;
 }
 .signal {
   display: flex;
