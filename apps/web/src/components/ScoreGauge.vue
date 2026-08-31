@@ -67,6 +67,14 @@ const center = computed(() => props.size / 2)
 </template>
 
 <style scoped>
+.gauge {
+  /* A bare <svg> has no aspect-ratio box, so a flex row's default
+     flex-shrink:1 squeezes its WIDTH toward zero while its HEIGHT stays
+     pinned to the width/height attributes — a squashed sliver, not a
+     smaller circle. flex:none makes this safe to drop into any flex
+     container without every caller having to remember the fix. */
+  flex: none;
+}
 .gauge__track {
   stroke: var(--surface-2);
   stroke-width: 5;
