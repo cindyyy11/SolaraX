@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
-import { Activity, ChartNoAxesCombined, LayoutDashboard } from '@lucide/vue'
+import { Activity, ChartNoAxesCombined, LayoutDashboard, ShieldCheck, FileText } from '@lucide/vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import SiteSearch from '@/components/SiteSearch.vue'
+import JudgeModeToggle from '@/components/JudgeModeToggle.vue'
+import JudgeModeOverlay from '@/components/JudgeModeOverlay.vue'
 </script>
 
 <template>
@@ -20,9 +22,16 @@ import SiteSearch from '@/components/SiteSearch.vue'
         <RouterLink to="/fleet-health" class="app-rail__link" aria-label="Fleet performance">
           <ChartNoAxesCombined :size="20" aria-hidden="true" /><span>Performance</span>
         </RouterLink>
+        <RouterLink to="/resilience" class="app-rail__link" aria-label="Resilience">
+          <ShieldCheck :size="20" aria-hidden="true" /><span>Resilience</span>
+        </RouterLink>
+        <RouterLink to="/reports" class="app-rail__link" aria-label="Reports">
+          <FileText :size="20" aria-hidden="true" /><span>Reports</span>
+        </RouterLink>
         <SiteSearch />
       </nav>
       <div class="app-rail__footer">
+        <JudgeModeToggle />
         <span class="app-rail__system" title="Fleet analysis is available">
           <Activity :size="17" aria-hidden="true" /><span>System ready</span>
         </span>
@@ -37,12 +46,15 @@ import SiteSearch from '@/components/SiteSearch.vue'
       <nav class="mobile-header__nav" aria-label="Primary navigation">
         <RouterLink to="/">Dispatch</RouterLink>
         <RouterLink to="/fleet-health">Fleet</RouterLink>
+        <RouterLink to="/resilience">Resilience</RouterLink>
+        <RouterLink to="/reports">Reports</RouterLink>
       </nav>
       <SiteSearch mobile />
       <ThemeToggle />
     </header>
 
     <div class="app-shell__content"><RouterView /></div>
+    <JudgeModeOverlay />
   </div>
 </template>
 
@@ -182,8 +194,18 @@ import SiteSearch from '@/components/SiteSearch.vue'
     display: flex;
     justify-content: flex-end;
     gap: 0.25rem;
+    /* Four links now live here (was two) — scroll rather than clip the
+       last one on a narrow phone, instead of guessing a width that holds
+       today's label set and breaks the next one added. */
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mobile-header__nav::-webkit-scrollbar {
+    display: none;
   }
   .mobile-header__nav a {
+    flex: none;
     display: inline-flex;
     min-height: 2.75rem;
     align-items: center;

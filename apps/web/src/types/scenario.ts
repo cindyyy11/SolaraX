@@ -1,6 +1,6 @@
 import type { Site } from './dispatch'
 
-export type ScenarioGroup = 'revenue' | 'inspection' | 'grid'
+export type ScenarioGroup = 'revenue' | 'inspection' | 'grid' | 'security'
 export type EvidenceLevel = 'measured' | 'inferred' | 'simulated'
 export type ScenarioResponse = 'monitor' | 'verify' | 'dispatch' | 'escalate'
 

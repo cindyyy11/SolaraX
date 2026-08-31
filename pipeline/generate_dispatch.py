@@ -1258,7 +1258,7 @@ def build_fleet_summary(site_objects, cohorts, assumptions):
     }
 
 
-def build_roi(fleet_summary, assumptions):
+def build_roi(fleet_summary, assumptions, site_objects):
     """Screen 4 figures for the observed period.
 
     WHAT CHANGED AND WHY. This function used to multiply one month by six and
@@ -1276,9 +1276,19 @@ def build_roi(fleet_summary, assumptions):
     frozen contract, but it now carries generation AT RISK — nothing has been
     recovered, and `generation_basis` says so.
 
-    Stays PLACEHOLDER until M2/M3 supply a real kwh_lost. Every figure below is
-    arithmetic on a made-up loss fraction; the arithmetic is now honest, the
-    input is not yet.
+    `data_status` USED TO BE HARDCODED "PLACEHOLDER", with a comment saying it
+    stays that way "until M2/M3 supply a real kwh_lost" — true when written,
+    stale since 30 Aug: M2 and M3 both shipped that day (docs/M2-M3-METHOD.md)
+    and every flagged site's economics now carries data_status BUILT (confirmed
+    against pipeline/output/dispatch.json — S-1276 and S-1200 both BUILT). Every
+    number below is arithmetic on those real, honest inputs; only
+    `faults_confirmed` stays a documented 0 (see faults_confirmed_basis) because
+    Screen 3's findings have nowhere real to land yet — that is a structural
+    fact about the store, not a fabricated figure, so it does not drag the
+    object back to PLACEHOLDER. The status below is derived from the actual
+    inputs rather than frozen at whatever was true the day this was written,
+    so it will correctly regress to PLACEHOLDER or SIMULATED again if a future
+    site's economics ever is.
     """
     period_months = 1
     horizon = assumptions["projection_horizon_months"]
@@ -1287,8 +1297,20 @@ def build_roi(fleet_summary, assumptions):
 
     generation_at_risk_kwh = round(fleet_summary["total_rm_at_risk"] / tariff, 1)
 
+    economics_statuses = {
+        site["economics"]["data_status"]
+        for site in site_objects
+        if site.get("economics")
+    }
+    if "PLACEHOLDER" in economics_statuses:
+        roi_status = "PLACEHOLDER"
+    elif "SIMULATED" in economics_statuses:
+        roi_status = "SIMULATED"
+    else:
+        roi_status = "BUILT"
+
     return {
-        "data_status": "PLACEHOLDER",
+        "data_status": roi_status,
         "period_months": period_months,
 
         # Trips, not sites: the cost is per mobilisation. See build_trip_groups.
@@ -1436,7 +1458,7 @@ def build_dispatch_payload(injected=False):
                            analysis=analysis),
         "assumptions": assumptions,
         "fleet_summary": fleet_summary,
-        "roi": build_roi(fleet_summary, assumptions),
+        "roi": build_roi(fleet_summary, assumptions, site_objects),
         "cohorts": cohorts,
         "sites": site_objects,
     }

@@ -1,7 +1,7 @@
 {
   "meta": {
     "schema_version": "1.6.0",
-    "generated_at": "2026-08-30T06:04:05Z",
+    "generated_at": "2026-08-31T02:48:08Z",
     "pipeline_version": "0.5.0",
     "reporting_month": "2026-08",
     "reporting_month_label": "August 2026",
@@ -136,7 +136,7 @@
     "cohort_count": 2
   },
   "roi": {
-    "data_status": "PLACEHOLDER",
+    "data_status": "BUILT",
     "period_months": 1,
     "visits_recommended_total": 0,
     "visits_avoided_total": 6,

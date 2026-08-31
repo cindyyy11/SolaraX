@@ -65,3 +65,61 @@
     transform: none;
   }
 }
+
+/* Shared card chrome — closes drift found across Site Detail's 9 content
+   blocks (3 different hand-rolled chrome recipes before this pass: two
+   radius values, elevation present on only 3 of 9, two different dark
+   surfaces for the two "instrument panel" cards). .card is the light
+   variant, .card--dark is for content that's deliberately a dark embedded
+   workspace (matches --nav-surface, the same dark plate the nav rail uses). */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+}
+.card--dark {
+  background: var(--nav-surface);
+  border: 1px solid var(--nav-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+}
+
+/* Hover-lift for browsable cards. Never applied to Work Order's .card — that
+   element is a print-document root, not a browsable card. */
+.card--interactive {
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+.card--interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--brand-navy) 12%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card--interactive:hover {
+    transform: none;
+  }
+}
+
+/* Shared entrance stagger. Callers set their own animation-delay per item
+   (nth-child rules for static markup, an inline style bound to a v-for
+   index for dynamic lists) — this class only owns the motion itself. */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.stagger-in {
+  animation: card-enter var(--duration-base) var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stagger-in {
+    animation: none;
+  }
+}

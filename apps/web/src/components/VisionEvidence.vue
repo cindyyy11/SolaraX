@@ -4,6 +4,7 @@ import {
   predictVision,
   type VisionPrediction,
 } from '@/services/api'
+import { recordEvidenceEvent } from '@/services/evidenceTimeline'
 // Which site the reader is looking at. The classifier does not use it — an
 // uploaded image never changes detection, economics or ranking (CLAUDE.md
 // anti-goal: imagery is corroborating evidence, never a trigger). It is here
@@ -111,11 +112,17 @@ function resetEvidence() {
   clearPreview()
 }
 
+function setReviewState(state: 'confirmed' | 'needs-review' | 'not-supported') {
+  reviewState.value = state
+  const labels = { confirmed:'CV evidence supports dispatch', 'needs-review':'CV evidence needs field verification', 'not-supported':'CV evidence does not support dispatch' }
+  recordEvidenceEvent({ id:`${props.siteId}-cv-review`, siteId:props.siteId, type:'operator-decision', timestamp:new Date().toISOString(), title:labels[state], detail:decisionMessage.value, evidenceLevel:'inferred', confidence:prediction.value?.evidence.confidence, status:state === 'confirmed' ? 'confirmed' : state === 'needs-review' ? 'pending' : 'conflicting', sourceRef:`vision-review:${props.siteId}` })
+}
+
 onBeforeUnmount(clearPreview)
 </script>
 
 <template>
-  <section class="vision">
+  <section class="vision card card--interactive">
     <div class="vision__heading">
       <div><h2 class="vision__title">Does this image support dispatch?</h2><p>Computer vision evidence · {{ props.siteName }}</p></div>
       <span>HUMAN REVIEW REQUIRED</span>
@@ -190,9 +197,9 @@ onBeforeUnmount(clearPreview)
   <p class="vision__localization">No spatial coordinates returned by the model. This result is shown as corroborating evidence only; no panel location is inferred.</p>
   <div class="vision__decision" aria-label="Evidence review decision">
     <span>Operator review</span>
-    <button type="button" :class="{ active: reviewState === 'confirmed' }" @click="reviewState = 'confirmed'">Supports dispatch</button>
-    <button type="button" :class="{ active: reviewState === 'needs-review' }" @click="reviewState = 'needs-review'">Needs field verification</button>
-    <button type="button" :class="{ active: reviewState === 'not-supported' }" @click="reviewState = 'not-supported'">Does not support</button>
+    <button type="button" :class="{ active: reviewState === 'confirmed' }" @click="setReviewState('confirmed')">Supports dispatch</button>
+    <button type="button" :class="{ active: reviewState === 'needs-review' }" @click="setReviewState('needs-review')">Needs field verification</button>
+    <button type="button" :class="{ active: reviewState === 'not-supported' }" @click="setReviewState('not-supported')">Does not support</button>
     <p class="vision__decision-message" aria-live="polite">{{ decisionMessage }}</p>
   </div>
 </div>
@@ -202,9 +209,6 @@ onBeforeUnmount(clearPreview)
 <style scoped>
 .vision {
   padding: 1.25rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
 }
 
 .vision__title {

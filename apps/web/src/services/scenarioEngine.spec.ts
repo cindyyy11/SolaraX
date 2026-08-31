@@ -24,4 +24,13 @@ describe('scenario engine', () => {
     const scenario = scenarioById('curtailment')!
     expect(runScenario(site, scenario, { severity: 50, duration: 4 }).affectedLayer).toBe('grid')
   })
+
+  it('labels cyber-physical readiness scenarios as simulated and never attack detection', () => {
+    for (const id of ['telemetry-dropout', 'suspicious-control-pattern']) {
+      const scenario = scenarioById(id)!
+      const result = runScenario(site, scenario, { severity: 50, duration: 2 })
+      expect(result.evidenceLevel).toBe('simulated')
+      expect(result.assumptions.join(' ').toLowerCase()).not.toContain('detected')
+    }
+  })
 })

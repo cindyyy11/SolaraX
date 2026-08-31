@@ -4,7 +4,7 @@
 > [`CLAUDE.md`](./CLAUDE.md); this file is status and nothing else. Update it at the end of every
 > working session — append to the log, don't rewrite history.
 
-**Last updated: 30 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **~1 day left**
+**Last updated: 31 Aug 2026** · **Deadline: 31 Aug 2026, 23:59 MYT** · **today**
 
 ---
 
@@ -13,7 +13,7 @@
 | | |
 |---|---|
 | **Phase** | Phase 3 — M1, M2, M3, M4 and the dashboard all run on real data |
-| **Code written** | Full BATCH pipeline end to end. **1 PLACEHOLDER value remains** (`$.roi`, M4/C) |
+| **Code written** | Full BATCH pipeline end to end. **0 PLACEHOLDER values remain** — validator confirms |
 | **Fleet** | **11 sites, 1.32 MWp, 2 cohorts**, 1 Jan – 21 Aug 2019, all carrying real generation |
 | **Schema** | 1.6.0, frozen and UNCHANGED by M2/M3 · pipeline 0.5.0 · 19 validator rules · **108 pipeline tests** |
 | **Public URL** | None yet — deploy config committed, needs the Vercel import ([`DEPLOY.md`](./DEPLOY.md)) |
@@ -69,6 +69,84 @@ cases · reproducible fleet-median script · fault-injection harness producing M
 ## Log
 
 Newest first. One entry per working session — what changed, what was decided, what broke.
+
+### 31 Aug 2026 (later) — the last PLACEHOLDER was stale, not real; fixed at the source
+
+`$.roi.data_status` had been hardcoded `"PLACEHOLDER"` in `pipeline/generate_dispatch.py`
+since before M2/M3 existed, with a comment saying it stays that way "until M2/M3 supply a
+real kwh_lost." M2 and M3 shipped on 30 Aug (see that entry below) and every flagged site's
+`economics.data_status` has been `BUILT` since — the comment's own precondition was already
+satisfied, but the hardcoded string never moved, so Fleet Health & ROI kept showing a
+PLACEHOLDER badge over numbers that were by then real.
+
+- **Fixed at the source, not papered over on screen.** `build_roi()` now derives
+  `data_status` as the worst case across the `economics.data_status` of every site
+  carrying a monthly loss figure — the same "worst case wins" pattern `build_meta()`
+  already used for the fleet-wide status — instead of a frozen string. It will
+  correctly regress to `SIMULATED` or `PLACEHOLDER` again if a future site's economics
+  ever is, rather than silently staying `BUILT` forever.
+- **`faults_confirmed: 0` stays 0 on purpose and does not drag the object back down.**
+  There is still no backend behind Screen 3's findings, so nothing can be counted as
+  confirmed — that is a structural fact stated in `faults_confirmed_basis`, not a
+  fabricated measurement, and not a reason to keep the whole `roi` object mislabeled.
+- **Regenerated and validated.** `python pipeline/generate_dispatch.py` then
+  `python pipeline/validate_dispatch.py` — **20/20 rules pass, "No PLACEHOLDER values
+  remain."** 116 pipeline tests still pass. Diff against the previous artifact is
+  exactly two fields: `meta.generated_at` and `roi.data_status`; every number is
+  unchanged, because none needed to be — see `pipeline/generate_dispatch.py`'s
+  `build_roi()` docstring for the specifics. Published to
+  `apps/web/public/dispatch.json` and `dispatch.mock.json`.
+
+### 31 Aug 2026 — closed-loop operations intelligence: evidence timeline closed, Resilience/Reports/Judge Mode built
+
+Continuing [`docs/superpowers/plans/2026-08-30-solarax-closed-loop-operations-intelligence-plan.md`](./docs/superpowers/plans/2026-08-30-solarax-closed-loop-operations-intelligence-plan.md).
+Phases 1-3 (evidence/recovery foundation, Recovery Tracker, Intervention Optimizer) were already
+built and committed going into this session. This session closed Phase 4 and built Phases 5-6.
+
+- **Phase 4 closed.** The Evidence Timeline was wired into Scenario Lab and Vision Evidence but not
+  into Work Order or Recovery. Added `services/workOrderRecords.ts` — the one place WorkOrderView's
+  localStorage findings and RecoveryTracker now agree on a schema and a storage key, instead of a
+  duplicated string literal. WorkOrderView now records a `work-order` evidence event on generation
+  and on a technician-attributed completion (guarded on outcome + visit date + technician, so the
+  checklist's autosave-on-tap never fires a false completion). RecoveryTracker now derives
+  `completedAt` from that same record, so a logged visit moves recovery from `projected` to
+  `pending` — never straight to `verified`, because there is still no post-work telemetry feed.
+- **Phase 5 (Resilience) built.** New `/resilience` screen: six categories (generation, equipment,
+  weather, grid, telemetry, communications), each traced to a real `dispatch.json` signal or
+  reported `not-connected` — never a fabricated score. Weather reads cohort-wide correlated status
+  as the same "cohort dip = weather" signal M3 uses. Cyber-physical readiness is a labelled-simulated
+  taxonomy (8 examples across 4 categories, each stating what real telemetry it would need); two are
+  also runnable, interactively, as new Scenario Lab entries (`telemetry-dropout`,
+  `suspicious-control-pattern`, new `security` scenario group). Integration readiness reports what
+  actually connects today (weather: NASA POWER, real; drone: gated on `isVisionApiConfigured()`) vs.
+  what a production deployment would need (SCADA, grid, ERP, security — all `not-connected`, stated
+  plainly).
+- **Phase 6 (Reports, Judge Mode) built.** New `/reports` screen builds a per-site evidence package
+  (decision, calculations, assumptions, source status, inspection evidence, work order, recovery)
+  from state the product already computed — no second calculation of any figure — plus a fleet
+  summary, with print/export and a retry path. Judge Mode is a docked (non-modal) overlay reachable
+  from the nav rail: eight steps mirroring the design spec's operator workflow, routing through the
+  same live screens with a real subject site resolved from the loaded dispatch artifact — never a
+  separate demo dataset.
+- **Verification:** 53 vitest tests passing (was 34; +19 for the new services), `vue-tsc --build`
+  clean, lint clean, production build clean. Manually walked the full loop in a real Chrome tab:
+  Dispatch → Judge Mode step-jump to a site's Scenario Lab → Work Order (filled and saved real
+  findings) → back to Site Detail, confirmed Recovery Tracker read the saved visit and moved to
+  `Recovery pending` with the correct next-eligible date, and the Evidence Timeline picked it up.
+  Desktop confirmed visually; mobile viewport could not be confirmed visually this session — the
+  browser tool's `resize_window` reported success but never changed the actual viewport in this
+  environment (tried twice, fresh tabs both times). Hardened the mobile nav defensively instead
+  (`overflow-x:auto` on the now-four-item nav row) rather than ship unverified.
+- **Not built this session:** Phase 7's full desktop/mobile QA pass is partial (desktop only, see
+  above) and there was no dedicated accessibility or reduced-motion pass beyond what Phase 4 already
+  had. `docs/DECISIONS.md` still needs a decisions entry for the Resilience/Reports/Judge Mode scope
+  if the team wants one on record.
+- **Also noticed, not evidence-timeline related:** `RecoveryTracker.vue` picked up a `card--dark
+  card--interactive` shared-class refactor from someone else's concurrent edit mid-session (visible
+  style diff, not reverted — see the file).
+
+**The bigger fact this session did not change:** per the blockers table above, the repo is still 404
+to the public with no live URL, and the deadline in this file's own header is today.
 
 ### 30 Aug 2026 (later) — scalability measured, front door rewritten, deployment configured
 

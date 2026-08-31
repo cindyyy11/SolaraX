@@ -79,7 +79,7 @@ function formatSigned(value: number, digits = 1): string {
 </script>
 
 <template>
-  <section v-if="thermalUnits.length" class="thermal">
+  <section v-if="thermalUnits.length" class="thermal card card--interactive">
     <header class="thermal__head">
       <div>
         <h2 class="thermal__heading">Inverter thermal map</h2>
@@ -205,9 +205,6 @@ function formatSigned(value: number, digits = 1): string {
   --thermal-ink-on-hot: #ffffff;
 
   padding: 1.25rem;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
 }
 
 @media (prefers-color-scheme: dark) {

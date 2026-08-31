@@ -31,6 +31,19 @@ const router = createRouter({
       component: () => import('../views/FleetHealthView.vue'),
     },
     {
+      // Resilience — the fourth connected surface. See the closed-loop
+      // operations intelligence design spec (docs/superpowers/specs/).
+      path: '/resilience',
+      name: 'resilience',
+      component: () => import('../views/ResilienceView.vue'),
+    },
+    {
+      // Reports — evidence packages for operators, management and judging.
+      path: '/reports',
+      name: 'reports',
+      component: () => import('../views/ReportsView.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundView,

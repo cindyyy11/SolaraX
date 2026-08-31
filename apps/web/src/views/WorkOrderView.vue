@@ -10,10 +10,16 @@
  *    recommends a thermal pass BEFORE roof entry, because a 15-minute flight
  *    avoids work-at-height permits, harnesses and a safety briefing (PRD v2 M5).
  *    Never imply every dispatch needs a drone; that is the v1 product we killed.
+ *    The safety line and the "what to bring" list are the same branch, stated
+ *    as things a technician needs before leaving the yard, not just after.
  *
  * 2. A FINDINGS SECTION. This closes DETECT -> VERIFY -> CONFIRM -> LEARN and is
  *    what populates Screen 4's confirmed-fault and recovered-generation figures.
  *    Without it the loop is open and the ROI screen has nothing real to count.
+ *    Each checklist item now records PASS / FAIL / N-A rather than a single
+ *    tick — "I looked at it" and "it's fine" are different facts, and only one
+ *    of them is useful to a report. A failed item prompts for a one-line note
+ *    and rolls up into a warning on the Findings section below it.
  *
  * Findings persist to localStorage only — there is no backend yet. That is
  * stated on screen rather than implied, so nobody assumes it syncs.
@@ -27,7 +33,9 @@
  * table trick is the standard, cross-browser substitute. `workOrderId` and
  * `openedAtLabel` exist for that document, not for the schema — dispatch.json
  * carries no work-order id (docs/Schema.md is FROZEN); this is a display-only
- * reference built from fields that are already real.
+ * reference built from fields that are already real. The app shell's nav rail
+ * is hidden globally for print in App.vue, not here — that chrome lives above
+ * every route, so the rule does too.
  */
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
@@ -52,12 +60,17 @@ import {
   Layers,
   MapPin,
   ExternalLink,
+  HardHat,
+  Wrench,
 } from '@lucide/vue'
 import { loadDispatch, findSite, findCohort, formatRinggit, formatCapacity } from '@/services/api'
 import type { Dispatch, Site, SiteStatus } from '@/types/dispatch'
 import DataStatusBadge from '@/components/DataStatusBadge.vue'
 import NoticeCallout from '@/components/NoticeCallout.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
+import { workOrderStorageKey, syncWorkOrderRecord } from '@/services/workOrderRecords'
+import { recordEvidenceEvent } from '@/services/evidenceTimeline'
+import ScoreGauge from '@/components/ScoreGauge.vue'
 
 const route = useRoute()
 const dispatch = ref<Dispatch | null>(null)
@@ -101,6 +114,27 @@ const openedAtLabel = openedAt.toLocaleString(undefined, {
 const mapsUrl = computed(() =>
   site.value ? `https://www.google.com/maps?q=${site.value.lat},${site.value.lon}` : '',
 )
+
+/** The one-line verdict a technician (or their dispatcher) reads first.
+ * Built entirely from fields already on the site — never a new claim, just
+ * the existing status, money-at-risk, divergence and confidence said once,
+ * together, instead of scattered across four different places on the page. */
+const executiveSummary = computed(() => {
+  if (!site.value || !statusMeta.value) return ''
+  if (!site.value.economics) {
+    return 'No visit needed this month — output stayed within cohort tolerance.'
+  }
+  const parts = [
+    `${statusMeta.value.label}: ${formatRinggit(site.value.economics.rm_at_risk_monthly)}/month at risk`,
+  ]
+  if (site.value.divergence) {
+    parts.push(`diverging ${site.value.divergence.days_since} days`)
+  }
+  if (site.value.hypothesis) {
+    parts.push(`${Math.round(site.value.hypothesis.confidence * 100)}% hypothesis confidence`)
+  }
+  return parts.join(' · ')
+})
 
 /** Where this site sits against the others — the "why this one" line. */
 const selectionRationale = computed(() => {
@@ -169,6 +203,15 @@ const verification = computed(() => {
         'Compare the thermal frames against the flagged inverter group',
         'Enter the roof only if the pass identifies a target',
       ],
+      safety:
+        'No roof access on this visit unless the thermal pass finds a target. If entry becomes ' +
+        "necessary afterwards, follow the site's work-at-height procedure and permit " +
+        'requirements before ascending — this trip does not carry that authorisation.',
+      equipment: [
+        'Thermal-imaging camera, or a drone carrying one',
+        'Charged spare batteries',
+        'Standard site PPE',
+      ],
     }
   }
 
@@ -183,13 +226,24 @@ const verification = computed(() => {
       'Open the combiner box and check breaker and fuse states',
       'Compare measured string currents against the healthy sibling units',
     ],
+    safety:
+      'Treat the combiner box as live until proven otherwise. De-energise and verify isolation ' +
+      "with a meter before opening any enclosure or touching conductors — follow the site's " +
+      'lockout/tagout procedure.',
+    equipment: [
+      'Clamp meter or multimeter',
+      'Lockout/tagout kit',
+      'Insulated PPE — gloves and eye protection',
+    ],
   }
 })
 
 // --- Findings (the data flywheel) -------------------------------------------
 
 type Outcome = '' | 'fault_confirmed' | 'nothing_found' | 'different_cause'
+type CheckStatus = '' | 'pass' | 'fail' | 'na'
 
+const findingsAssignee = ref('')
 const findingsOutcome = ref<Outcome>('')
 const findingsNote = ref('')
 const findingsRecoveredKwh = ref('')
@@ -197,64 +251,121 @@ const findingsRecoveredKwh = ref('')
  * is attributable, the way a paper work order's sign-off block would be. */
 const findingsTechnician = ref('')
 const findingsVisitDate = ref('')
+const findingsTimeIn = ref('')
+const findingsTimeOut = ref('')
 const savedAt = ref<string | null>(null)
-/** Ticked checklist items, by their text. A technician works down this list. */
-const ticked = ref<Record<string, boolean>>({})
+/** Each checklist item's evaluated state, by its text. "Inspected and fine"
+ * and "inspected and broken" are different facts — a single tick can't tell
+ * them apart, which is exactly the ambiguity a report can't afford. */
+const checkStatus = ref<Record<string, CheckStatus>>({})
+/** A short note per check, shown only once that check is marked failed. */
+const checkNotes = ref<Record<string, string>>({})
+/** Photograph items are binary — captured or not — so they keep a plain tick. */
+const photosCaptured = ref<Record<string, boolean>>({})
 
-const storageKey = computed(() => `solarax:findings:${route.params.siteId}`)
+const storageKey = computed(() => workOrderStorageKey(String(route.params.siteId)))
 
 function loadFindings(): void {
-  ticked.value = {}
+  findingsAssignee.value = ''
   findingsOutcome.value = ''
   findingsNote.value = ''
   findingsRecoveredKwh.value = ''
   findingsTechnician.value = ''
   findingsVisitDate.value = ''
+  findingsTimeIn.value = ''
+  findingsTimeOut.value = ''
   savedAt.value = null
+  checkStatus.value = {}
+  checkNotes.value = {}
+  photosCaptured.value = {}
 
   const raw = localStorage.getItem(storageKey.value)
   if (!raw) return
   try {
     const parsed = JSON.parse(raw)
+    findingsAssignee.value = parsed.assignee ?? ''
     findingsOutcome.value = parsed.outcome ?? ''
     findingsNote.value = parsed.note ?? ''
     findingsRecoveredKwh.value = parsed.recovered_kwh ?? ''
     findingsTechnician.value = parsed.technician ?? ''
     findingsVisitDate.value = parsed.visit_date ?? ''
+    findingsTimeIn.value = parsed.time_in ?? ''
+    findingsTimeOut.value = parsed.time_out ?? ''
     savedAt.value = parsed.saved_at ?? null
-    ticked.value = parsed.ticked ?? {}
+    checkStatus.value = parsed.check_status ?? {}
+    checkNotes.value = parsed.check_notes ?? {}
+    photosCaptured.value = parsed.photos_captured ?? {}
   } catch {
     // A corrupt entry is not worth blocking the screen over.
   }
 }
 
-function saveFindings(): void {
-  savedAt.value = new Date().toISOString()
-  localStorage.setItem(
-    storageKey.value,
-    JSON.stringify({
-      outcome: findingsOutcome.value,
-      note: findingsNote.value,
-      recovered_kwh: findingsRecoveredKwh.value,
-      technician: findingsTechnician.value,
-      visit_date: findingsVisitDate.value,
-      ticked: ticked.value,
-      saved_at: savedAt.value,
-    }),
-  )
+/** What a completed outcome reads as on the evidence timeline — the same
+ * three choices the Findings radios offer, in past tense. */
+const OUTCOME_EVENT: Record<Exclude<Outcome, ''>, { title: string; status: 'confirmed' | 'observed' | 'conflicting' }> = {
+  fault_confirmed: { title: 'Field visit confirmed the fault', status: 'confirmed' },
+  nothing_found: { title: 'Field visit found nothing wrong', status: 'observed' },
+  different_cause: { title: 'Field visit found a different cause', status: 'conflicting' },
 }
 
-/** Ticks persist immediately — a technician should not have to remember to save. */
-watch(ticked, saveFindings, { deep: true })
+function saveFindings(): void {
+  savedAt.value = new Date().toISOString()
+  const snapshot = {
+    assignee: findingsAssignee.value,
+    outcome: findingsOutcome.value,
+    note: findingsNote.value,
+    recovered_kwh: findingsRecoveredKwh.value,
+    technician: findingsTechnician.value,
+    visit_date: findingsVisitDate.value,
+    time_in: findingsTimeIn.value,
+    time_out: findingsTimeOut.value,
+    check_status: checkStatus.value,
+    check_notes: checkNotes.value,
+    photos_captured: photosCaptured.value,
+    saved_at: savedAt.value,
+  }
+  localStorage.setItem(storageKey.value, JSON.stringify(snapshot))
+  if (site.value) syncWorkOrderRecord(site.value.site_id, snapshot)
+
+  // Only a dated, attributed, outcome-bearing save is a completion event —
+  // a tapped Pass/Fail box mid-visit (this function also runs from the
+  // checklist watcher) is not yet "the work order finished".
+  if (site.value && findingsOutcome.value && findingsVisitDate.value && findingsTechnician.value) {
+    const outcome = OUTCOME_EVENT[findingsOutcome.value]
+    recordEvidenceEvent({
+      id: `${site.value.site_id}-work-order-complete`,
+      siteId: site.value.site_id,
+      type: 'work-order',
+      timestamp: findingsVisitDate.value,
+      title: outcome.title,
+      detail: findingsNote.value || `${findingsTechnician.value} completed the visit on ${findingsVisitDate.value}.`,
+      evidenceLevel: 'measured',
+      status: outcome.status,
+      sourceRef: `work-order:${workOrderId.value}`,
+    })
+  }
+}
+
+/** Tapping a Pass/Fail/N-A option or a photo tick persists immediately — a
+ * technician should not have to remember to save a single tap. Typed fields
+ * (notes, the outcome, recovered kWh) still wait for the Save button, so a
+ * half-typed sentence is never what gets written to disk. */
+watch([checkStatus, photosCaptured], saveFindings, { deep: true })
 
 const checklistProgress = computed(() => {
-  const all = [
-    ...(site.value?.hypothesis?.checks ?? []),
-    ...(site.value?.hypothesis?.photograph ?? []),
-  ]
-  const done = all.filter((item) => ticked.value[item]).length
-  return { done, total: all.length }
+  const checks = site.value?.hypothesis?.checks ?? []
+  const photos = site.value?.hypothesis?.photograph ?? []
+  const checksDone = checks.filter((item) => checkStatus.value[item]).length
+  const photosDone = photos.filter((item) => photosCaptured.value[item]).length
+  return { done: checksDone + photosDone, total: checks.length + photos.length }
 })
+
+/** Rolls up into a warning on the Findings section — a failed check point
+ * should be impossible to miss by the time a technician reaches the outcome
+ * radios below it. */
+const failedChecks = computed(() =>
+  (site.value?.hypothesis?.checks ?? []).filter((check) => checkStatus.value[check] === 'fail'),
+)
 
 // --- Rank context ------------------------------------------------------------
 
@@ -307,6 +418,22 @@ onMounted(async () => {
   dispatch.value = result.dispatch
   isLoading.value = false
   loadFindings()
+  // Timestamped to the pipeline run, not "now" — a work order exists as of
+  // when the dispatch artifact ranked it, not whenever someone opens the
+  // screen. Keeps replay ordering stable across repeat visits.
+  if (site.value && dispatch.value) {
+    recordEvidenceEvent({
+      id: `${site.value.site_id}-work-order-generated`,
+      siteId: site.value.site_id,
+      type: 'work-order',
+      timestamp: dispatch.value.meta.generated_at,
+      title: 'Work order generated',
+      detail: `${workOrderId.value} generated from pipeline ${dispatch.value.meta.pipeline_version}.`,
+      evidenceLevel: 'measured',
+      status: 'observed',
+      sourceRef: `work-order:${workOrderId.value}`,
+    })
+  }
 })
 
 watch(() => route.params.siteId, loadFindings)
@@ -317,7 +444,7 @@ function printCard(): void {
 </script>
 
 <template>
-  <main class="screen">
+  <main class="screen screen--narrow">
     <section v-if="isLoading" class="load-state" aria-live="polite">
       <span class="load-state__pulse"></span>
       <div>
@@ -346,7 +473,7 @@ function printCard(): void {
         <RouterLink :to="`/site/${site.site_id}`" class="crumbs__link">Site detail</RouterLink>
         <button
           type="button"
-          class="print-button"
+          class="btn-primary print-button"
           title="Opens your browser's print dialog — choose “Save as PDF” as the destination."
           @click="printCard"
         >
@@ -373,20 +500,12 @@ function printCard(): void {
             <header class="card__head">
               <div>
                 <h1 class="card__title">Work order — {{ site.name }}</h1>
-                <p class="card__address">
-                  <MapPin :size="13" aria-hidden="true" class="card__address-icon" />
-                  {{ site.address }}
-                  <a
-                    :href="mapsUrl"
-                    target="_blank"
-                    rel="noopener"
-                    class="card__maps-link no-print"
-                  >
-                    Open in Maps <ExternalLink :size="11" aria-hidden="true" />
-                  </a>
-                </p>
-                <p class="card__sub">
-                  {{ dispatch?.meta.reporting_month_label }} · {{ workOrderId }}
+                <p
+                  v-if="executiveSummary"
+                  class="exec-line"
+                  :class="`exec-line--${statusMeta?.tone}`"
+                >
+                  {{ executiveSummary }}
                 </p>
               </div>
               <div class="card__meta">
@@ -398,6 +517,72 @@ function printCard(): void {
                 <p class="card__ref">{{ site.site_id }} · {{ site.source_system_id }}</p>
               </div>
             </header>
+
+            <!-- The work-order header table — one place for every fact a
+                 dispatcher or technician needs before setting off, instead of
+                 the same handful of numbers scattered across prose and a
+                 separate facts strip. -->
+            <dl class="doc-table">
+              <div class="doc-table__row">
+                <dt>Address</dt>
+                <dd>
+                  <MapPin :size="12" aria-hidden="true" class="doc-table__icon" />{{ site.address }}
+                  <a
+                    :href="mapsUrl"
+                    target="_blank"
+                    rel="noopener"
+                    class="doc-table__maps no-print"
+                  >
+                    Open in Maps <ExternalLink :size="11" aria-hidden="true" />
+                  </a>
+                </dd>
+              </div>
+              <div class="doc-table__row">
+                <dt>Coordinates</dt>
+                <dd>{{ site.lat.toFixed(5) }}, {{ site.lon.toFixed(5) }}</dd>
+              </div>
+              <div class="doc-table__row">
+                <dt>Capacity</dt>
+                <dd>{{ formatCapacity(site.capacity_kwp) }}</dd>
+              </div>
+              <div class="doc-table__row">
+                <dt>Cohort</dt>
+                <dd>{{ cohort?.label ?? 'Ungrouped' }}</dd>
+              </div>
+              <div v-if="site.economics" class="doc-table__row">
+                <dt>Money at risk</dt>
+                <dd class="doc-table__strong">
+                  {{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month
+                </dd>
+              </div>
+              <div v-if="site.divergence" class="doc-table__row">
+                <dt>Diverging since</dt>
+                <dd>{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</dd>
+              </div>
+              <div class="doc-table__row">
+                <dt>Reporting month</dt>
+                <dd>{{ dispatch?.meta.reporting_month_label }}</dd>
+              </div>
+              <div class="doc-table__row doc-table__row--assign">
+                <dt>Assigned to</dt>
+                <dd>
+                  <input
+                    v-model="findingsAssignee"
+                    type="text"
+                    placeholder="Technician / crew name"
+                    autocomplete="name"
+                    @change="saveFindings"
+                  />
+                </dd>
+              </div>
+            </dl>
+
+            <!-- Safety, stated before any technical detail — not buried in
+                 section 4 where a technician might not reach it before
+                 opening an enclosure or heading for the roof. -->
+            <NoticeCallout v-if="verification" tone="warning" :icon="HardHat" class="safety">
+              <strong>Safety.</strong> {{ verification.safety }}
+            </NoticeCallout>
 
             <!-- Why this site, in plain language, before any technical detail. -->
             <NoticeCallout tone="info" class="rationale">{{ selectionRationale }}</NoticeCallout>
@@ -452,44 +637,22 @@ function printCard(): void {
               </p>
             </section>
 
-            <section class="facts">
-              <div>
-                <span class="facts__key">Capacity</span
-                ><span>{{ formatCapacity(site.capacity_kwp) }}</span>
-              </div>
-              <div>
-                <span class="facts__key">Cohort</span
-                ><span>{{ cohort?.label ?? 'Ungrouped' }}</span>
-              </div>
-              <div v-if="site.economics">
-                <span class="facts__key">At risk</span>
-                <span class="facts__strong"
-                  >{{ formatRinggit(site.economics.rm_at_risk_monthly) }}/month</span
-                >
-              </div>
-              <div v-if="site.divergence">
-                <span class="facts__key">Diverging since</span>
-                <span
-                  >{{ site.divergence.start_date }} ({{ site.divergence.days_since }} days)</span
-                >
-              </div>
-              <div class="no-print">
-                <span class="facts__key">Coordinates</span>
-                <span>{{ site.lat.toFixed(5) }}, {{ site.lon.toFixed(5) }}</span>
-              </div>
-            </section>
-
             <section v-if="site.hypothesis" class="section">
               <h2 class="section__title">
                 <TriangleAlert :size="13" aria-hidden="true" class="section__icon" />
                 What we think is wrong
               </h2>
-              <p class="section__lead">{{ site.hypothesis.summary }}</p>
-              <p class="section__body">{{ site.hypothesis.detail }}</p>
-              <p class="section__meta">
-                Confidence {{ Math.round(site.hypothesis.confidence * 100) }}% · method:
-                {{ site.detection?.method }}
-              </p>
+              <div class="hypothesis">
+                <ScoreGauge :score="site.hypothesis.confidence" tone="warning" :size="56" />
+                <div>
+                  <p class="section__lead">{{ site.hypothesis.summary }}</p>
+                  <p class="section__body">{{ site.hypothesis.detail }}</p>
+                  <p class="section__meta">
+                    Confidence {{ Math.round(site.hypothesis.confidence * 100) }}% · method:
+                    {{ site.detection?.method }}
+                  </p>
+                </div>
+              </div>
             </section>
 
             <!-- Conditional on the hypothesis. Not every dispatch needs a drone. -->
@@ -532,6 +695,11 @@ function printCard(): void {
               <ol class="steps">
                 <li v-for="step in verification.steps" :key="step">{{ step }}</li>
               </ol>
+
+              <h3 class="subhead"><Wrench :size="12" aria-hidden="true" /> What to bring</h3>
+              <ul class="equipment">
+                <li v-for="item in verification.equipment" :key="item">{{ item }}</li>
+              </ul>
             </section>
 
             <section v-if="site.hypothesis?.checks?.length" class="section">
@@ -542,13 +710,44 @@ function printCard(): void {
                   >{{ checklistProgress.done }} / {{ checklistProgress.total }} done</span
                 >
               </h2>
-              <ul class="checklist">
-                <li v-for="check in site.hypothesis.checks" :key="check">
-                  <label class="checklist__item">
-                    <input v-model="ticked[check]" type="checkbox" />
-                    <span :class="{ checklist__done: ticked[check] }">{{ check }}</span>
-                  </label>
-                </li>
+              <ul class="checktable">
+                <template v-for="check in site.hypothesis.checks" :key="check">
+                  <li class="checkrow">
+                    <span class="checkrow__text">{{ check }}</span>
+                    <div class="seg" role="radiogroup" :aria-label="check">
+                      <label class="seg__opt seg__opt--pass">
+                        <input
+                          v-model="checkStatus[check]"
+                          type="radio"
+                          :name="check"
+                          value="pass"
+                        />
+                        <span>Pass</span>
+                      </label>
+                      <label class="seg__opt seg__opt--fail">
+                        <input
+                          v-model="checkStatus[check]"
+                          type="radio"
+                          :name="check"
+                          value="fail"
+                        />
+                        <span>Fail</span>
+                      </label>
+                      <label class="seg__opt seg__opt--na">
+                        <input v-model="checkStatus[check]" type="radio" :name="check" value="na" />
+                        <span>N/A</span>
+                      </label>
+                    </div>
+                  </li>
+                  <li v-if="checkStatus[check] === 'fail'" class="checkrow__note">
+                    <textarea
+                      v-model="checkNotes[check]"
+                      rows="2"
+                      placeholder="What did you find?"
+                      @change="saveFindings"
+                    ></textarea>
+                  </li>
+                </template>
               </ul>
             </section>
 
@@ -560,8 +759,8 @@ function printCard(): void {
               <ul class="checklist">
                 <li v-for="item in site.hypothesis.photograph" :key="item">
                   <label class="checklist__item">
-                    <input v-model="ticked[item]" type="checkbox" />
-                    <span :class="{ checklist__done: ticked[item] }">{{ item }}</span>
+                    <input v-model="photosCaptured[item]" type="checkbox" />
+                    <span :class="{ checklist__done: photosCaptured[item] }">{{ item }}</span>
                   </label>
                 </li>
               </ul>
@@ -616,6 +815,11 @@ function printCard(): void {
                 Findings — complete after the visit
               </h2>
 
+              <NoticeCallout v-if="failedChecks.length" tone="critical" compact class="fail-rollup">
+                {{ failedChecks.length }} check{{ failedChecks.length > 1 ? 's' : '' }} failed above
+                — see the notes on each. Consider marking the outcome "Fault confirmed" below.
+              </NoticeCallout>
+
               <div class="field-row">
                 <label class="field">
                   <span class="field__label">Technician name</span>
@@ -629,6 +833,17 @@ function printCard(): void {
                 <label class="field">
                   <span class="field__label">Date completed</span>
                   <input v-model="findingsVisitDate" type="date" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span class="field__label">Time in</span>
+                  <input v-model="findingsTimeIn" type="time" />
+                </label>
+                <label class="field">
+                  <span class="field__label">Time out</span>
+                  <input v-model="findingsTimeOut" type="time" />
                 </label>
               </div>
 
@@ -679,7 +894,7 @@ function printCard(): void {
               </div>
 
               <div class="field no-print">
-                <button type="button" class="save-button" @click="saveFindings">
+                <button type="button" class="btn-primary save-button" @click="saveFindings">
                   Save findings
                 </button>
                 <span v-if="savedAt" class="field__saved"
@@ -752,12 +967,6 @@ function printCard(): void {
 </template>
 
 <style scoped>
-.screen {
-  max-width: var(--container-narrow);
-  margin: 0 auto;
-  padding: clamp(1.25rem, 2.8vw, 2.75rem);
-}
-
 /* --- Loading / missing states — same idiom as the Dispatch List's
      .load-state, so a slow network reads the same way everywhere. --- */
 
@@ -837,41 +1046,22 @@ function printCard(): void {
 
 /* The primary action on each of the two places it appears: print the card,
    and commit the findings. Amber fill + navy ink, matching the work-order
-   button on Site Detail — one action treatment across the product. */
-.print-button,
-.save-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+   button on Site Detail — one action treatment across the product. Visual
+   idiom now comes from .btn-primary (assets/layout.css); only placement
+   survives here. */
+.print-button {
   margin-left: auto;
-  padding: 0.5rem 0.9rem;
-  background: var(--action-fill);
-  color: var(--action-ink);
-  border: none;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.print-button:hover,
-.save-button:hover {
-  background: var(--action-fill-hover);
-}
-
-.print-button:active,
-.save-button:active {
-  transform: scale(0.97);
 }
 
 .save-button {
   margin-left: 0;
 }
 
+/* Deliberately duplicates the global .card class's values rather than using
+   that class directly — this element is a print-document root, not a
+   browsable card, and must never pick up .card--interactive's hover-lift or
+   any future change to the shared class. Keep these four properties in sync
+   with layout.css's .card by hand if that class ever changes. */
 .card {
   padding: 1.75rem;
   background: var(--surface-1);
@@ -913,7 +1103,7 @@ function printCard(): void {
 }
 
 .activity {
-  margin-top: 1.5rem;
+  margin-top: var(--space-lg);
   padding-top: 1.25rem;
   border-top: 1px solid var(--border-hairline);
 }
@@ -978,44 +1168,28 @@ function printCard(): void {
 
 .card__title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.85rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* The one-line verdict — bigger and bolder than ordinary body text, coloured
+   by the same tone as the priority chip, so a scan of the page lands here
+   first regardless of where the eye starts. */
+.exec-line {
+  margin: 0.4rem 0 0;
+  font-size: 0.98rem;
   font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
 }
-
-.card__address {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.35rem 0 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
+.exec-line--critical {
+  color: var(--status-critical);
 }
-
-.card__address-icon {
-  flex: none;
-  color: var(--text-muted);
+.exec-line--warning {
+  color: var(--brand-solar-deep);
 }
-
-.card__maps-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25em;
-  color: var(--action-text);
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-.card__maps-link:hover {
-  text-decoration: underline;
-}
-
-.card__sub {
-  margin: 0.3rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.76rem;
+.exec-line--good {
+  color: var(--success-text);
 }
 
 .card__meta {
@@ -1069,42 +1243,82 @@ function printCard(): void {
   color: var(--status-good);
 }
 
-/* Tint, border and icon come from NoticeCallout. This previously used --series-1,
-   a CHART categorical colour, as a page-chrome accent — series colours are
-   reserved for data marks and borrowing one here quietly broke that rule. */
-.rationale {
-  margin-top: 1rem;
-}
+/* --- Work-order header table --- */
 
-.facts {
+.doc-table {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.6rem 1.5rem;
-  margin: 1.25rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.7rem 1.5rem;
+  margin: 1.1rem 0;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--border-hairline);
+  border-bottom: 1px solid var(--border-hairline);
 }
 
-.facts div {
+.doc-table__row {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border-hairline);
-  font-size: 0.9rem;
+  gap: 0.2rem;
 }
 
-.facts__key {
-  font-size: 0.66rem;
+.doc-table dt {
+  font-size: 0.64rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.facts__strong {
+.doc-table dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.doc-table__icon {
+  margin-right: 0.3em;
+  color: var(--text-muted);
+  vertical-align: -1px;
+}
+
+.doc-table__strong {
   font-weight: 700;
 }
 
+.doc-table__maps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  margin-left: 0.5rem;
+  color: var(--action-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.doc-table__maps:hover {
+  text-decoration: underline;
+}
+
+.doc-table__row--assign input {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* Safety sits between the header table and everything else — see the
+   template comment for why it isn't inside section 4 instead. */
+.safety {
+  margin-bottom: 1rem;
+}
+
+/* Tint, border and icon come from NoticeCallout. This previously used --series-1,
+   a CHART categorical colour, as a page-chrome accent — series colours are
+   reserved for data marks and borrowing one here quietly broke that rule. */
+.rationale {
+  margin-top: 0;
+}
+
 .section {
-  margin-top: 1.5rem;
+  margin-top: var(--space-lg);
   padding-top: 1rem;
   border-top: 1px solid var(--border-hairline);
 }
@@ -1165,11 +1379,50 @@ function printCard(): void {
   color: var(--text-muted);
 }
 
+.hypothesis {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.hypothesis > div {
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .hypothesis {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+}
+
 .steps {
   margin: 0;
   padding-left: 1.2rem;
   font-size: 0.88rem;
   line-height: 1.7;
+}
+
+/* Small all-caps label ahead of a secondary list within a section — the
+   equipment list under "How to verify it", not important enough for a
+   numbered section title of its own. */
+.subhead {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: 1rem 0 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.equipment {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .checklist {
@@ -1243,10 +1496,108 @@ function printCard(): void {
   white-space: nowrap;
 }
 
+/* --- What-to-check table: Pass / Fail / N-A per row, not a single tick.
+     "Inspected and fine" and "inspected and broken" are different facts. --- */
+
+.checktable {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.checkrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.checkrow:last-child {
+  border-bottom: none;
+}
+
+.checkrow__text {
+  flex: 1 1 200px;
+  font-size: 0.86rem;
+}
+
+.checkrow__note {
+  margin: -0.1rem 0 0.6rem;
+}
+
+.checkrow__note textarea {
+  border-color: var(--callout-critical-border);
+}
+
+.seg {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--baseline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.seg__opt {
+  position: relative;
+  display: inline-flex;
+}
+
+.seg__opt input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.seg__opt span {
+  display: block;
+  padding: 0.3rem 0.65rem;
+  border-left: 1px solid var(--baseline);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.seg__opt:first-child span {
+  border-left: none;
+}
+
+.seg__opt--pass input:checked + span {
+  background: var(--callout-good-bg);
+  color: var(--success-text);
+}
+
+.seg__opt--fail input:checked + span {
+  background: var(--callout-critical-bg);
+  color: var(--status-critical);
+}
+
+.seg__opt--na input:checked + span {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.seg__opt input:focus-visible + span {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.fail-rollup {
+  margin-bottom: 1rem;
+}
+
 /* --- Rank context --- */
 
 .rank {
-  margin-top: 1.25rem;
+  margin-top: var(--space-lg);
 }
 
 .rank__list {
@@ -1312,7 +1663,7 @@ function printCard(): void {
 /* --- Trace --- */
 
 .trace {
-  margin-top: 1.25rem;
+  margin-top: var(--space-lg);
 }
 
 .trace__wrap {
@@ -1543,7 +1894,8 @@ function printCard(): void {
 textarea,
 input[type='number'],
 input[type='text'],
-input[type='date'] {
+input[type='date'],
+input[type='time'] {
   width: 100%;
   padding: 0.5rem 0.6rem;
   background: var(--page-plane);
@@ -1606,6 +1958,10 @@ input[type='date'] {
   }
   .units__bar {
     grid-column: 1 / -1;
+  }
+  .checkrow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
@@ -1677,7 +2033,9 @@ input[type='date'] {
   .units__row,
   .activity__event,
   .field,
-  .field-row {
+  .field-row,
+  .doc-table__row,
+  .checkrow {
     break-inside: avoid;
   }
 
@@ -1717,12 +2075,15 @@ input[type='date'] {
   textarea,
   input[type='number'],
   input[type='text'],
-  input[type='date'] {
+  input[type='date'],
+  input[type='time'] {
     border: 1px solid #999;
     background: transparent;
   }
 
   /* Native checkboxes print inconsistently across engines; the custom box
-     defined above (border + background, no OS chrome) is used as-is. */
+     defined above (border + background, no OS chrome) is used as-is. The
+     Pass/Fail/N-A segmented control is driven by :checked, a real DOM state,
+     so it prints whichever option was actually selected. */
 }
 </style>
