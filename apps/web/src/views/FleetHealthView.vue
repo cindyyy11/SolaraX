@@ -189,6 +189,15 @@ const assumptionRows = computed(() => {
         { low: number; high: number } | undefined,
     }))
 })
+
+/** Where a value sits within its published range, as a percent — the visual
+ * behind each assumption row instead of reading "low – high" as bare text.
+ * Only meaningful for a numeric value with a range; guarded at the call site. */
+function rangePosition(value: number, range: { low: number; high: number }): number {
+  const span = range.high - range.low
+  if (span <= 0) return 50
+  return Math.min(100, Math.max(0, ((value - range.low) / span) * 100))
+}
 </script>
 
 <template>
@@ -482,7 +491,20 @@ const assumptionRows = computed(() => {
                 </td>
                 <td class="table__num">{{ row.value }}</td>
                 <td class="table__num">
-                  <template v-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
+                  <template v-if="row.range && typeof row.value === 'number'">
+                    <div
+                      class="range-track"
+                      role="img"
+                      :aria-label="`${row.value} within published range ${row.range.low} to ${row.range.high}`"
+                    >
+                      <span
+                        class="range-track__dot"
+                        :style="{ left: `${rangePosition(row.value, row.range)}%` }"
+                      ></span>
+                    </div>
+                    <small class="range-track__caption">{{ row.range.low }}–{{ row.range.high }}</small>
+                  </template>
+                  <template v-else-if="row.range">{{ row.range.low }} – {{ row.range.high }}</template>
                   <template v-else>—</template>
                 </td>
                 <td class="table__note">{{ row.note || '—' }}</td>
@@ -1103,6 +1125,33 @@ const assumptionRows = computed(() => {
 .table__note {
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* Where a value sits within its published range, instead of "low – high" as
+   bare text — the same read as the assumptions table's own rationale, drawn. */
+.range-track {
+  position: relative;
+  width: 84px;
+  height: 4px;
+  margin-left: auto;
+  background: var(--surface-2);
+  border-radius: var(--radius-full);
+}
+.range-track__dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: var(--series-1);
+  border: 2px solid var(--surface-1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.range-track__caption {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
 }
 
 code {
