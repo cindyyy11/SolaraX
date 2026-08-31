@@ -948,10 +948,10 @@ function printCard(): void {
 
 .card__title {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  font-size: 1.85rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .card__address {
@@ -1074,7 +1074,7 @@ function printCard(): void {
 }
 
 .section {
-  margin-top: 1.5rem;
+  margin-top: var(--space-lg);
   padding-top: 1rem;
   border-top: 1px solid var(--border-hairline);
 }
